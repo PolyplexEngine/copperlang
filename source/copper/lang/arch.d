@@ -53,33 +53,59 @@ enum SizeTag stDOUBLE = 5;
 //              Registers               \\
 /// There's 20 general purpose registers (of differing sizes) available.
 /// STKP is the stackpointer, can be manipulated to get values from the stack.
-/// PRGC is the program counter, cannot be modified directly, other than by using JUMP instructions
+/// IC is the instruction counter, cannot be modified directly, other than by using JUMP instructions
 /// FLAGS is set via CMP instructions, can be queried via various commands.
 alias Register = ubyte;
 
-/// Register 0 (All sizes)
-enum Register regR0 = 0;
+/// Register 0
+enum Register regGP0 = 0;
 
-/// Register 1 (All sizes)
-enum Register regR1 = 6;
+/// Register 1
+enum Register regGP1 = 1;
 
-/// Register 2 (All sizes)
-enum Register regR2 = 12;
+/// Register 2
+enum Register regGP2 = 2;
 
-/// Register 3 (All sizes)
-enum Register regR3 = 18;
+/// Register 3
+enum Register regGP3 = 3;
 
-/// Register 4 (All sizes)
-enum Register regR4 = 24;
+/// Register 4
+enum Register regGP4 = 4;
+
+/// Register 5
+enum Register regGP5 = 5;
+
+/// Register 6
+enum Register regGP6 = 6;
+
+/// Register 7
+enum Register regGP7 = 7;
 
 /// Stack pointer (qword)
-enum Register regSTKP = 31;
+enum Register regSTCK = 8;
 
-/// program counter (qword)
-enum Register regPRGC = 32;
+/// instruction counter (qword)
+enum Register regIC = 9;
 
 /// Flag register
-enum Register regFLAGS = 33;
+enum Register regFLAGS = 10;
+
+/// A byte
+enum Register regBYTE =  0b10000000;
+
+/// A word (2 bytes)
+enum Register regWORD =  0b01000000;
+
+/// A dword (4 bytes)
+enum Register regDWORD = regBYTE | regWORD;
+
+/// A qword (8 bytes)
+enum Register regQWORD = 0b00100000;
+
+// Set PTR word accordingly to bitdepth of CPU
+version(D_X32)          enum Register regPTRWORD = regDWORD;
+else version(D_LP64)    enum Register regPTRWORD = regQWORD;
+
 
 
 //              OP Codes                \\

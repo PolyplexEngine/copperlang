@@ -5,13 +5,14 @@ The Copper VM is a register based VM, following some X86 architectural decisions
 
 | Register ID   | Usage               | Notes                             |
 |---------------|:-------------------:|-----------------------------------|
-| GP0           | GP                  | Append data size                  |
-| GP1           | GP                  | Append data size                  |
-| GP2           | GP                  | Append data size                  |
-| GP3           | GP                  | Append data size                  |
-| GP4           | GP                  | Append data size                  |
-| GP5           | GP                  | Append data size                  |
-| GP6           | GP                  | Append data size                  |
+| GP0           | General Purpose     | Append data size                  |
+| GP1           | General Purpose     | Append data size                  |
+| GP2           | General Purpose     | Append data size                  |
+| GP3           | General Purpose     | Append data size                  |
+| GP4           | General Purpose     | Append data size                  |
+| GP5           | General Purpose     | Append data size                  |
+| GP6           | General Purpose     | Append data size                  |
+| GP7           | General Purpose     | Append data size                  |
 | STCK          | Stack Pointer       | Mostly modified using pop/push    |
 | FLG           | Flag Register       | Flags not accesible directly      |
 | IC            | Instruction Counter | The instruction counter           |
@@ -22,19 +23,24 @@ Datasize is essentially splitting up the 8 byte wide registers in to smaller reg
 Though the VM ISA understands the type sizes specified in instructions and will use data accordingly.
 Do be aware of data overlap.
 
+
+When appending datasize in copper asm, do the following:
+ *   `.byte`
+ *   `.word`
+ *   `.dword`
+ *   `.qword`
+ *   `.ptrword`
+
+For example: 
 ```
-When appending datasize, append via:
-    *   .byte
-    *   .word
-    *   .dword
-    *   .qword
-    *   .ptrword
-Example:
-    GP0.byte
+GP0.byte
+GP1.ptrword
+etc...
+```
 
 Implicitly ptrword will be used.
 PTRWord is DWORD on 32 bit systems, QWORD on 64 bit systems.
-```
+
 
 ## Flags
 
@@ -60,5 +66,18 @@ PTRWord is DWORD on 32 bit systems, QWORD on 64 bit systems.
 | ptrword (32 bit)| 4 bytes         |
 | ptrword (64 bit)| 8 bytes         |
 
+## Segments
+
+| Segment Name | Segment Function | Notes                                                                                           |
+|--------------|------------------|-------------------------------------------------------------------------------------------------|
+| DATA         | Storing raw data | Attempts to JUMP or in other ways execute from the DATA segment will cause a runtime error. |
+| CODE         | Storing code     | Code is executed from here, CODE segment is read-only.                                          |
+
 ## Instructions
 To be written
+
+
+## Temporary Placeholders
+
+Function calls are done via passing the stack as a function parameter to the D function.
+This will in the future be replaced by inline assembly-based direct function calls using the compilers and machines native calling conventions.
