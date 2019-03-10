@@ -112,7 +112,7 @@ PTRWord is DWORD on 32 bit systems, QWORD on 64 bit systems.
 | 40 | MOV         | Move X to Y                      |                                                                                 |
 | 41 | MOVC        | Move constant X to Y             |                                                                                 |
 | 64 | ADD         | X + Y                            | Carry/Overflow flag will be set if overflowing.                                 |
-| 65 | SUB         | X - Y                            | Carry/Overflow flag will be set if overflowing.                                 |
+| 65 | SUB         | X - Y                            | Carry/Overflow flag will be set if underflowing.                                |
 | 66 | MUL         | X * Y                            | Outputs to double the size of registers specified, if needed uses GP0 and GP1.⁰ |
 | 67 | DIV         | X / Y                            |                                                                                 |
 
