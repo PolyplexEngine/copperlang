@@ -28,6 +28,9 @@ enum Flag flagNegative          = 0b00000000_01000000;
 /// Value X is address. X may vary between instructions!
 enum Flag flagIsAddr            = 0b00000000_10000000;
 
+/// Value X is compatible with value Y.
+enum Flag flagIsCompatible            = 0b00000001_00000000;
+
 //              Size Tags               \\
 alias SizeTag = ubyte;
 
@@ -81,14 +84,26 @@ enum Register regGP6 = 6;
 /// Register 7
 enum Register regGP7 = 7;
 
-/// Stack pointer (qword)
-enum Register regSTCK = 8;
+/// FP Register 0
+enum Register regFP0 = 16;
 
-/// instruction counter (qword)
-enum Register regIC = 9;
+/// FP Register 1
+enum Register regFP1 = 17;
+
+/// FP Register 2
+enum Register regFP2 = 18;
+
+/// FP Register 3
+enum Register regFP3 = 19;
+
+/// Stack pointer (ptrword)
+enum Register regSTCK = 32;
+
+/// instruction pointer (ptrword)
+enum Register regIP = 33;
 
 /// Flag register
-enum Register regFLAGS = 10;
+enum Register regFLAGS = 34;
 
 /// A byte
 enum Register regBYTE =  0b10000000;
@@ -102,9 +117,9 @@ enum Register regDWORD = regBYTE | regWORD;
 /// A qword (8 bytes)
 enum Register regQWORD = 0b00100000;
 
-// Set PTR word accordingly to bitdepth of CPU
-version(D_X32)          enum Register regPTRWORD = regDWORD;
-else version(D_LP64)    enum Register regPTRWORD = regQWORD;
+/// Set PTR word accordingly to bitdepth of CPU
+version(D_X32)          enum Register regPTRWORD = regDWORD; 
+else version(D_LP64)    enum Register regPTRWORD = regQWORD; /// Set PTR word accordingly to bitdepth of CPU
 
 
 
@@ -118,23 +133,17 @@ alias OPCode = ubyte;
 /// Pop values off stack
 enum OPCode opPOP = 0;
 
-/// Push D pointer value on to stack 
+/// Push value on to stack 
 enum OPCode opPSH = 1;
 
-/// Push constant value to stack
-enum OPCode opPSHC = 2;
-
-/// Push value on to stack
-enum OPCode opPSHV = 3;
-
 /// Call subroutine
-enum OPCode opCALL = 5;
+enum OPCode opCALL = 8;
 
 /// Call D subroutine
-enum OPCode opCALLDPTR = 6;
+enum OPCode opCALLDPTR = 9;
 
 /// Return from subroutine
-enum OPCode opRET = 7;
+enum OPCode opRET = 10;
 
 /*
         Branching/Jumping
@@ -182,116 +191,27 @@ enum OPCode opJBE = 24;
 /// Compare bytes
 enum OPCode opCMP = 25;
 
-/// Compare words
-enum OPCode opCMPW = 26;
-
-/// Compare dwords
-enum OPCode opCMPD = 27;
-
-/// Compare qwords
-enum OPCode opCMPQ = 28;
-
-/// Compare floats
-enum OPCode opCMPF = 29;
-
-/// Compare doubles
-enum OPCode opCMPDF = 30;
-
 /*
         Data modification
 */
 
-/// move byte ( 1 byte )
+/// move 
 enum OPCode opMOV = 40;
 
-/// move word ( 2 bytes )
-enum OPCode opMOVW = 41;
+/// move constant
+enum OPCode opMOVC = 40;
 
-/// move dword ( 4 bytes )
-enum OPCode opMOVD = 42;
+/// Add
+enum OPCode opADD = 64;
 
-/// move qword ( 8 bytes )
-enum OPCode opMOVQ = 42;
+/// Subtract
+enum OPCode opSUB = 65;
 
+/// Multiply
+enum OPCode opMUL = 66;
 
-/// Add byte ( 1 byte )
-enum OPCode opADD = 45;
-
-/// Add word ( 2 bytes )
-enum OPCode opADDW = 46;
-
-/// Add dword ( 4 bytes)
-enum OPCode opADDD = 47;
-
-/// Add qword ( 8 bytes )
-enum OPCode opADDQ = 48;
-
-/// Add float ( 4 bytes )
-enum OPCode opADDF = 49;
-
-/// Add double ( 8 bytes )
-enum OPCode opADDDF = 50;
-
-
-
-/// Subtract byte ( 1 byte )
-enum OPCode opSUB = 51;
-
-/// Subtract word ( 2 bytes )
-enum OPCode opSUBW = 52;
-
-/// Subtract dword ( 4 bytes)
-enum OPCode opSUBD = 53;
-
-/// Subtract qword ( 8 bytes )
-enum OPCode opSUBQ = 54;
-
-/// Subtract float ( 4 bytes )
-enum OPCode opSUBF = 55;
-
-/// Subtract double ( 8 bytes )
-enum OPCode opSUBDF = 56;
-
-
-
-/// Multiply byte ( 1 byte )
-enum OPCode opMUL = 57;
-
-/// Multiply word ( 2 bytes )
-enum OPCode opMULW = 58;
-
-/// Multiply dword ( 4 bytes)
-enum OPCode opMULD = 59;
-
-/// Multiply qword ( 8 bytes )
-enum OPCode opMULQ = 60;
-
-/// Multiply float ( 4 bytes )
-enum OPCode opMULF = 61;
-
-/// Multiply double ( 8 bytes )
-enum OPCode opMULDF = 62;
-
-
-/// Divide byte ( 1 byte )
-enum OPCode opDIV = 57;
-
-/// Divide word ( 2 bytes )
-enum OPCode opDIVW = 58;
-
-/// Divide dword ( 4 bytes)
-enum OPCode opDIVD = 59;
-
-/// Divide qword ( 8 bytes )
-enum OPCode opDIVQ = 60;
-
-/// Divide float ( 4 bytes )
-enum OPCode opDIVF = 61;
-
-/// Divide double ( 8 bytes )
-enum OPCode opDIVDF = 62;
-
-
+/// Divide
+enum OPCode opDIV = 67;
 
 
 size_t getArgCount(OPCode code) {
