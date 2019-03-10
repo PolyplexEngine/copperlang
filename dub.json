@@ -1,0 +1,10 @@
+{
+	"description": "A small Lua like scripting language.",
+	"license": "BSL1.0",
+	"authors": [
+		"Clipsey"
+	],
+	"copyright": "Copyright © 2019, Clipsey",
+	"name": "copperlang",
+	"versions": ["DEBUG"]
+}
