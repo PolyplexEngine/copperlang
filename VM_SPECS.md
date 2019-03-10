@@ -16,6 +16,11 @@ The Copper VM is a register based VM, following some X86 architectural decisions
 | FLG           | Flag Register | Flags not accesible directly      |
 
 ### Notes
+
+Datasize is essentially splitting up the 8 byte wide registers in to smaller registers, think of a register as a C union.
+Though the VM ISA understands the type sizes specified in instructions and will use data accordingly.
+Do be aware of data overlap.
+
 ```
 When appending datasize, append via:
     *   .byte
