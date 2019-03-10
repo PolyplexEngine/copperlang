@@ -3,17 +3,18 @@ The Copper VM is a register based VM, following some X86 architectural decisions
 
 ## Registers
 
-| Register ID   | Usage         | Notes                             |
-|---------------|:-------------:|-----------------------------------|
-| GP0           | GP            | Append data size                  |
-| GP1           | GP            | Append data size                  |
-| GP2           | GP            | Append data size                  |
-| GP3           | GP            | Append data size                  |
-| GP4           | GP            | Append data size                  |
-| GP5           | GP            | Append data size                  |
-| GP6           | GP            | Append data size                  |
-| STCK          | Stack Pointer | Mostly modified using pop/push    |
-| FLG           | Flag Register | Flags not accesible directly      |
+| Register ID   | Usage               | Notes                             |
+|---------------|:-------------------:|-----------------------------------|
+| GP0           | GP                  | Append data size                  |
+| GP1           | GP                  | Append data size                  |
+| GP2           | GP                  | Append data size                  |
+| GP3           | GP                  | Append data size                  |
+| GP4           | GP                  | Append data size                  |
+| GP5           | GP                  | Append data size                  |
+| GP6           | GP                  | Append data size                  |
+| STCK          | Stack Pointer       | Mostly modified using pop/push    |
+| FLG           | Flag Register       | Flags not accesible directly      |
+| IC            | Instruction Counter | The instruction counter           |
 
 ### Notes
 
