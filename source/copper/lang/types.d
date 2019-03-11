@@ -69,7 +69,7 @@ public union ValData
 
         static if (is(T : ubyte[])) {
 
-            dat.ubyteArr = data;
+            dat.ubyteArr[0..data.length] = data;
         } else static if (isBasicType!T) {
 
             mixin(q{dat.%s_ = data;}.format(T.stringof));
@@ -84,6 +84,7 @@ public union ValData
         return dat;
     }
     
+    alias register = ubyte_;
 
     /// ubyte
     ubyte ubyte_;

@@ -1,9 +1,12 @@
 # Virtual Machine Specifications (Work in Progress)
-The Copper VM is a register based VM, following some X86 architectural decisions.
+The Copper VM is a register based VM, borrowing concepts from ARM and X86.
 
 &nbsp;
 
 ## Registers
+The VM has 8 general purpose registers (GP0 to GP7) as well 4 floating point registers (FP0 to FP3)
+
+**Note:** GP0 and GP1 will be overwritten if doing multiplication with QWORDS.
 
 | Register ID   | Usage               | Notes                             |
 |---------------|:-------------------:|-----------------------------------|
@@ -19,9 +22,9 @@ The Copper VM is a register based VM, following some X86 architectural decisions
 | FP1           | Floating Point      | Single Precision                  |
 | FP2           | Floating Point      | Double Precision                  |
 | FP3           | Floating Point      | Double Precision                  |
-| STCK          | Stack Pointer       | Mostly modified using pop/push    |
+| ESP           | Stack Pointer       | Mostly modified using pop/push    |
 | FLG           | Flag Register       | Flags not accesible directly      |
-| IP            | Instruction Pointer | The instruction pointer           |
+| IP            | Instruction Pointer | Modified via JUMP instructions    |
 
 &nbsp;
 
@@ -88,33 +91,39 @@ PTRWord is DWORD on 32 bit systems, QWORD on 64 bit systems.
 &nbsp;
 
 ## Instructions
-| Id | Instruction | Action                           | Notes                                                                           |
-|---:|-------------|:--------------------------------:|---------------------------------------------------------------------------------|
-| 0  | POP         | Pops a value off stack           |                                                                                 |
-| 1  | PSH         | Pushes value to stack            |                                                                                 |
-| 8  | CALL        | Calls a subroutine               | For copper subroutines only!                                                    |
-| 9  | CALLDPTR    | Calls a D subroutine/function    | For D function pointers only!                                                   |
-| 10 | RET         | Return to caller                 |                                                                                 |
-| 12 | JMP         | Jump to address                  | You can only jump to CODE segment addresses.                                    |
-| 13 | JZ          | Jump to address if zero          | You can only jump to CODE segment addresses.                                    |
-| 14 | JNZ         | Jump to address if not zero      | You can only jump to CODE segment addresses.                                    |
-| 15 | JS          | Jump to address if sign          | You can only jump to CODE segment addresses.                                    |
-| 16 | JNS         | Jump to address if not sign      | You can only jump to CODE segment addresses.                                    |
-| 17 | JC          | Jump to address if carry         | You can only jump to CODE segment addresses.                                    |
-| 18 | JNC         | Jump to address if not carry     | You can only jump to CODE segment addresses.                                    |
-| 19 | JE          | Jump to address if equal         | You can only jump to CODE segment addresses.                                    |
-| 20 | JNE         | Jump to address if not equal     | You can only jump to CODE segment addresses.                                    |
-| 21 | JA          | Jump to address if above         | You can only jump to CODE segment addresses.                                    |
-| 22 | JAE         | Jump to address if above or equal| You can only jump to CODE segment addresses.                                    |
-| 23 | JB          | Jump to address if below         | You can only jump to CODE segment addresses.                                    |
-| 24 | JBE         | Jump to address if below or equal| You can only jump to CODE segment addresses.                                    |
-| 25 | CMP         | Compare X and Y                  | Comparing GP and FP will set Compatible flag to 0.                              |
-| 40 | MOV         | Move X to Y                      |                                                                                 |
-| 41 | MOVC        | Move constant X to Y             |                                                                                 |
-| 64 | ADD         | X + Y                            | Carry/Overflow flag will be set if overflowing.                                 |
-| 65 | SUB         | X - Y                            | Carry/Overflow flag will be set if underflowing.                                |
-| 66 | MUL         | X * Y                            | Outputs to double the size of registers specified, if needed uses GP0 and GP1.⁰ |
-| 67 | DIV         | X / Y                            |                                                                                 |
+| Id  | OPCode      | Len | Action                                | Notes                                                                           |
+|----:|-------------|-----|:-------------------------------------:|---------------------------------------------------------------------------------|
+|   0 | POP         | 1   | Pops values off stack (use LDR to get)|                                                                                 |
+|   1 | PSH         | 1   | Pushes value to stack                 |                                                                                 |
+|   8 | CALL        | 1   | Calls a subroutine                    | For copper subroutines only!                                                    |
+|   9 | CALLDPTR    | 1   | Calls a D subroutine/function         | For D function pointers only!                                                   |
+|  10 | RET         | 0   | Return to caller                      |                                                                                 |
+|  12 | JMP         | 1   | Jump to address                       | You can only jump to CODE segment addresses.                                    |
+|  13 | JZ          | 1   | Jump to address if zero               | You can only jump to CODE segment addresses.                                    |
+|  14 | JNZ         | 1   | Jump to address if not zero           | You can only jump to CODE segment addresses.                                    |
+|  15 | JS          | 1   | Jump to address if sign               | You can only jump to CODE segment addresses.                                    |
+|  16 | JNS         | 1   | Jump to address if not sign           | You can only jump to CODE segment addresses.                                    |
+|  17 | JC          | 1   | Jump to address if carry              | You can only jump to CODE segment addresses.                                    |
+|  18 | JNC         | 1   | Jump to address if not carry          | You can only jump to CODE segment addresses.                                    |
+|  19 | JE          | 1   | Jump to address if equal              | You can only jump to CODE segment addresses.                                    |
+|  20 | JNE         | 1   | Jump to address if not equal          | You can only jump to CODE segment addresses.                                    |
+|  21 | JA          | 1   | Jump to address if above              | You can only jump to CODE segment addresses.                                    |
+|  22 | JAE         | 1   | Jump to address if above or equal     | You can only jump to CODE segment addresses.                                    |
+|  23 | JB          | 1   | Jump to address if below              | You can only jump to CODE segment addresses.                                    |
+|  24 | JBE         | 1   | Jump to address if below or equal     | You can only jump to CODE segment addresses.                                    |
+|  25 | CMP         | 2   | Compare X and Y                       | Comparing GP and FP will set Compatible flag to 0.                              |
+|  32 | LDR         | 3   | Load from address X to register Y     | Value order is: (register, address, offset (signed))                            |
+|  33 | STR         | 3   | Store to address Y from register X    | Value order is: (register, address, offset (signed))                            |
+|  43 | MOV         | 2   | Move X to Y                           |                                                                                 |
+|  44 | MOVC        | 2   | Move constant X to Y                  |                                                                                 |
+|  64 | ADD         | 2   | X + Y                                 | Carry/Overflow flag will be set if overflowing.                                 |
+|  65 | ADDS        | 2   | X + Y   (Signed)                      | Carry/Overflow flag will be set if overflowing.                                 |
+|  66 | SUB         | 2   | X - Y                                 | Carry/Overflow flag will be set if underflowing.                                |
+|  67 | SUBS        | 2   | X - Y   (Signed)                      | Carry/Overflow flag will be set if underflowing.                                |
+|  68 | MUL         | 2   | X * Y                                 | Outputs to double the size of registers specified, if needed uses GP0 and GP1.⁰ |
+|  69 | MULS        | 2   | X * Y   (Signed)                      | Outputs to double the size of registers specified, if needed uses GP0 and GP1.⁰ |
+|  70 | DIV         | 2   | X / Y                                 |                                                                                 |
+|  71 | DIVS        | 2   | X / Y   (Signed)                      |                                                                                 |
 
 ### Notes
 [⁰] Both Carry and Overflow flags will be set if the address space of the value being multipled is overflowed.
