@@ -7,7 +7,7 @@ enum MaxStackSize = 10_000;
 struct VMStack(size_t stackSize = MaxStackSize) {
 private:
     // The actual stack, aligned with pointer length * stacksize bytes
-    ubyte[MaxStackSize*size_t.sizeof] stack;
+    ubyte[MaxStackSize*8] stack;
 
     // the stack pointer
     ubyte* stackptr;
@@ -22,14 +22,22 @@ public:
     }
 
     void push(ValData val) {
-        stackptr[0..size_t.sizeof] = val.ubyteArr;
+        stackptr[0..8] = val.ubyteArr;
         stackptr += ValData.sizeof;
+    }
+
+    size_t peek(size_t offset) {
+        return cast(size_t)*(stackptr-(offset*8));
     }
 
     size_t popRaw() {
         // point at next element
-        stackptr -= size_t.sizeof;
+        stackptr -= 8;
         return cast(size_t)*stackptr;
+    }
+
+    void pop(size_t count) {
+        stackptr -= count*8;
     }
 
     size_t stackOffset() {
@@ -38,9 +46,9 @@ public:
 
     string toString() {
         string oStr;
-        foreach(i; 0..(stackOffset()/size_t.sizeof)) {
-            size_t offs = i*size_t.sizeof;
-            size_t offsLen = offs+size_t.sizeof;
+        foreach(i; 0..(stackOffset()/8)) {
+            size_t offs = i*8;
+            size_t offsLen = offs+8;
 
             size_t val = (ValData.create(stack[offs..offsLen])).ptr_;
 

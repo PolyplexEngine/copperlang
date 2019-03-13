@@ -74,12 +74,19 @@ void testTComp() {
 	}
 	writeln("\n===================== bytecode =====================");
 	Chunk* tchunk = new Chunk(0, []);
-	tchunk.writeMOVC(41, regGP0);
-	tchunk.writeMOVC(1, regGP1);
-	tchunk.writeMOVC(32, regGP5);
-	tchunk.writeADD(regGP0, regGP1);
+	tchunk.writeMOVC(41, regGP0 | regBYTE);
+	tchunk.writeMOVC(1, regGP1 | regBYTE);
+	tchunk.writeMOVC(32, regGP5 | regBYTE);
+	tchunk.writeADD(regGP0 | regBYTE, regGP1 | regBYTE);
+	tchunk.writePSH(regGP0 | regBYTE);
+	tchunk.writeCMP(regGP0 | regBYTE, regGP5 | regBYTE);
 	tchunk.writePSH(regGP0);
-	tchunk.writeCMP(regGP0, regGP5);
+	tchunk.writePSH(regGP0);
+	tchunk.writePSH(regGP0);
+	tchunk.writePSH(regGP5);
+	tchunk.writePSH(regGP0);
+	tchunk.writePEEK(regGP3, 2);
+	tchunk.writePOP(6);
 	tchunk.writeRET();
 	VM vm;
 	writeln(vm.interpret(tchunk));

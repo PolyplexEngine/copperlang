@@ -97,7 +97,7 @@ private:
     Chunk* chunk;
     
     /// Consumes an argument
-    ValData consume(size_t sz = size_t.sizeof) {
+    ValData consume(size_t sz = 8) {
         ValData retVal = ValData.create(registers.ip[0..sz]);
         registers.ip += sz;
         return retVal;
@@ -137,6 +137,12 @@ public:
         return run();
     }
 
+    Instr nextInstruction() {
+        Instr instr = *cast(Instr*)(registers.ip);
+        registers.ip += 2;
+        return instr;
+    }
+
     /// Run
     vmResult run() {
         ubyte* sPtr = chunk.instr.ptr;
@@ -153,8 +159,8 @@ public:
                 import std.stdio : writeln;
                 writeln(disasmInstr(chunk, cast(size_t)(registers.ip - chunk.instr.ptr)).toString);
             }
-            ubyte instruction;
-            switch(instruction = *(registers.ip++)) {
+            Instr instruction;
+            switch((instruction = nextInstruction()).opcode) {
                 case (opMOVC):
                     consumeTo(consume().register);
                     continue;
@@ -215,10 +221,21 @@ public:
                     stack.push(registers[x].qword);
                     continue;
 
+                case (opPOP):
+                    size_t amount = consume().ptr_;
+                    stack.pop(amount);
+                    continue;
+
+                case (opPEEK):
+                    Register x = consume().register;
+                    size_t offset = consume().ptr_;
+                    registers[x].ptrword = stack.peek(offset);
+                    continue;
+
                 case (opRET):
                     return vmResultOK;
                 default:
-                    writeln("FAIL");
+                    writeln("FAIL ", cast(size_t)(registers.ip-chunk.instr.ptr), ": ", instruction.opcode);
                     return vmResultRuntimeError;
             }
         }

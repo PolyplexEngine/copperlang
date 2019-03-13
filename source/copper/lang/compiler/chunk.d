@@ -2,7 +2,6 @@ module copper.lang.compiler.chunk;
 import copper.lang.arch;
 import copper.lang.types;
 import std.traits;
-
 public struct Chunk
 {
 private:
@@ -14,6 +13,16 @@ private:
             // grow the array by a factor of 2.
             instr.length = capacity < 8 ? 8 : (capacity) * 2;
         }
+    }
+
+    void place(void* data, size_t at, size_t length) {
+        instr[at..at+length] = (cast(ubyte*)data)[0..length];
+        count += length;
+    }
+
+    void placeEnd(void* data, size_t length) {
+        grow(length);
+        place(data, count, length);
     }
 
 public:
@@ -34,14 +43,23 @@ public:
         return instr.length;
     }
 
-    void write(ubyte byt)
-    {
-        grow();
-        instr[count] = byt;
-        count++;
+    void write(OPCode code, Option options) {
+        grow(Instr.sizeof);
+        Instr instr;
+        instr.opcode = code;
+        instr.options = options;
+        placeEnd(&instr, Instr.sizeof);
     }
 
-    void writeData(T)(T data)
+    void write(OPCode code) {
+        grow(Instr.sizeof);
+        Instr instr;
+        instr.opcode = code;
+        instr.options = 0;
+        placeEnd(&instr, Instr.sizeof);
+    }
+
+    void writeData(T, bool staticCount = true)(T data)
     {
         grow(size_t.sizeof);
 
@@ -49,7 +67,8 @@ public:
 
         // Apply the value.
         instr[count .. count + val.as.ubyteArr.length] = val.as.ubyteArr;
-        count += 8;
+        static if (staticCount) count += 8;
+        else count += T.sizeof;
     }
     
     /// Pop values off stack
@@ -62,6 +81,13 @@ public:
     void writePSH(Register register) {
         write(opPSH);
         writeData(register);
+    }
+
+    /// peek value from stack
+    void writePEEK(Register register, size_t offset) {
+        write(opPEEK);
+        writeData(register);
+        writeData(offset);
     }
 
     /// Call Copper subroutine

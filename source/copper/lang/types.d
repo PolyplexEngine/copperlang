@@ -126,5 +126,5 @@ public union ValData
     void* object_;
 
     /// Array of data, used internally.
-    ubyte[size_t.sizeof] ubyteArr;
+    ubyte[8] ubyteArr;
 }

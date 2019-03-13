@@ -1,6 +1,23 @@
 module copper.lang.arch;
 public:
 
+/// A single instruction
+struct Instr {
+    /// The OP Code
+    OPCode opcode;
+
+    /// Options about what kinds of arguments are passed.
+    Option options;
+}
+
+alias Option = ubyte;
+    enum Option optSValue       = 0b10000000;
+    enum Option optOffset       = 0b01000000;
+    enum Option opt1Register    = 0b00001000;
+    enum Option opt1Address     = 0b00000100;
+    enum Option opt2Register    = 0b00000010;
+    enum Option opt2Address     = 0b00000001;
+
 //              CPU Flags               \\
 /// Flags, NC* flags are placeholders and might have use later.
 alias Flag = ushort;
@@ -150,6 +167,9 @@ alias OPCode = ubyte;
     /// Push value on to stack 
     enum OPCode opPSH = 1;
 
+    /// Peek value offset from stack
+    enum OPCode opPEEK = 2;
+
     /// Call subroutine
     enum OPCode opCALL = 8;
 
@@ -239,6 +259,7 @@ size_t getArgCount(OPCode code) {
     switch(code) {
         case (opPSH):               return 1;
         case (opPOP):               return 1;
+        case (opPEEK):              return 2;
         case (opCALL):              return 1;
         case (opRET):               return 0;
         case (opJMP):               return 0;
@@ -261,6 +282,8 @@ string getString(OPCode opcode) {
             return "POP";
         case (opPSH):
             return "PSH";
+        case (opPEEK):
+            return "PEEK";
         case (opCALL):
             return "CALL";
         case (opCALLDPTR):

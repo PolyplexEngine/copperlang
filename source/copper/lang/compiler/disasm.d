@@ -30,20 +30,24 @@ struct DisAsmChunk {
 DisAsmChunk[] disassemble(Chunk* chunk) {
     DisAsmChunk[] chunks;
     for (size_t offset = 0; offset < chunk.count;) {
-        chunks ~= disasmInstr(chunk, &offset);
+        chunks ~= disasmInstr(chunk, offset);
     }
     return chunks;
 }
 
-DisAsmChunk disasmInstr(Chunk* chunk, size_t* offset) {
-    ubyte instr = chunk.instr[*offset];
+/*DisAsmChunk disasmInstr(Chunk* chunk, size_t* offset) {
+    import std.stdio : writeln;
+    ubyte instr = chunk.instr[*(offset++)];
+    ubyte opt = chunk.instr[*(offset++)];
+    writeln(instr, ", ", opt);
     DisAsmChunk oChunk = DisAsmChunk(*offset, (cast(OPCode)instr).getString());
-    (*offset)++;
+    //(*offset) += 2;
     return oChunk;
-}
+}*/
 
 DisAsmChunk disasmInstr(Chunk* chunk, size_t offset) {
     ubyte instr = chunk.instr[offset++];
+    ubyte opt = chunk.instr[offset++];
     void* argPtr = cast(void*)(chunk.instr[offset..offset+(size_t.sizeof*instr.getArgCount)]);
     size_t[] args = (cast(size_t*)argPtr)[0..instr.getArgCount()];
     DisAsmChunk oChunk = DisAsmChunk(offset, (cast(OPCode)instr).getString(), args);
