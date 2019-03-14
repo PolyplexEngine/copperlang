@@ -1,6 +1,8 @@
 module copper.lang.arch;
 public:
 
+enum COMPRESS_CODE = false;
+
 /// A single instruction
 struct Instr {
     /// The OP Code
@@ -262,11 +264,17 @@ size_t getArgCount(OPCode code) {
         case (opPEEK):              return 2;
         case (opCALL):              return 1;
         case (opRET):               return 0;
-        case (opJMP):               return 0;
-        case (opJZ):                return 0;
-        case (opJNZ):               return 0;
-        case (opJS):                return 0;
-        case (opJNS):               return 0;
+        case (opJMP):               return 1;
+        case (opJZ):                return 1;
+        case (opJNZ):               return 1;
+        case (opJS):                return 1;
+        case (opJNS):               return 1;
+        case (opJE):                return 1;
+        case (opJNE):               return 1;
+        case (opJA):                return 1;
+        case (opJAE):               return 1;
+        case (opJB):                return 1;
+        case (opJBE):               return 1;
         case (opMOVC):              return 2;
         case (opADD):               return 2;
         case (opCMP):               return 2;

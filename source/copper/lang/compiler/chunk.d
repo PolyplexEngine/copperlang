@@ -2,9 +2,16 @@ module copper.lang.compiler.chunk;
 import copper.lang.arch;
 import copper.lang.types;
 import std.traits;
+private struct AddrMap {
+    size_t to;
+    size_t[] maps;
+}
+
 public struct Chunk
 {
 private:
+    size_t addressMappings;
+    AddrMap[size_t] addressMap;
 
     void grow(size_t amount = 1)
     {
@@ -32,9 +39,44 @@ public:
     /// Instructions
     ubyte[] instr;
 
+    this(size_t count, ubyte[] instr) {
+        this.count = count;
+        this.instr = instr;
+    }
+
     ~this()
     {
         destroy(instr);
+    }
+
+    size_t newAddrPtr(size_t to = -1) {
+        addressMap[addressMappings++] = AddrMap(to, []);
+        return addressMappings-1;
+    }
+
+    size_t newAddrPtr() {
+        addressMap[addressMappings++] = AddrMap(count, []);
+        return addressMappings-1;
+    }
+
+    void setAddrPtr(size_t map, size_t value) {
+        addressMap[map].to = value;
+    }
+
+    void setAddrPtr(size_t map) {
+        addressMap[map].to = count;
+    }
+
+    void addRef(size_t mapping, size_t position) {
+        addressMap[mapping].maps ~= position;
+    }
+
+    void updateRefs() {
+        foreach(mapping; addressMap) {
+            foreach(address; mapping.maps) {
+                writeDataAt(mapping.to, address);
+            }
+        }
     }
 
     /// capacity
@@ -59,7 +101,16 @@ public:
         placeEnd(&instr, Instr.sizeof);
     }
 
-    void writeData(T, bool staticCount = true)(T data)
+    void writeDataAt(T)(T data, size_t offset) {
+        grow(size_t.sizeof);
+
+        ChunkVal val = ChunkVal.constr(data);
+
+        // Apply the value.
+        instr[offset .. offset + val.as.ubyteArr.length] = val.as.ubyteArr;
+    }
+
+    void writeData(T)(T data)
     {
         grow(size_t.sizeof);
 
@@ -67,10 +118,15 @@ public:
 
         // Apply the value.
         instr[count .. count + val.as.ubyteArr.length] = val.as.ubyteArr;
-        static if (staticCount) count += 8;
+        static if (!COMPRESS_CODE) count += 8;
         else count += T.sizeof;
     }
     
+    /// Gets the current position for use in labels
+    size_t labelOffset() {
+        return count;
+    }
+
     /// Pop values off stack
     void writePOP(size_t amount = 1) {
         write(opPOP);
@@ -110,79 +166,92 @@ public:
     /// Jump to address
     void writeJMP(size_t address) {
         write(opJMP);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
 
     /// Jump to address if zero
     void writeJZ(size_t address) {
         write(opJZ);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
 
     /// Jump to address if not zero
     void writeJNZ(size_t address) {
         write(opJZ);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if sign
     void writeJS(size_t address) {
         write(opJS);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if not sign
     void writeJNS(size_t address) {
         write(opJNS);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if carry
     void writeJC(size_t address) {
         write(opJC);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if not carry
     void writeJNC(size_t address) {
         write(opJNC);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if equal
     void writeJE(size_t address) {
         write(opJE);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if not equal
     void writeJNE(size_t address) {
         write(opJNE);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if above
     void writeJA(size_t address) {
         write(opJE);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if above or equal
     void writeJAE(size_t address) {
         write(opJAE);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if below
     void writeJB(size_t address) {
         write(opJB);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
     
     /// Jump to address if below or equal
     void writeJBE(size_t address) {
         write(opJBE);
-        writeData(address);
+        addRef(address, count);
+        writeData!size_t(0);
     }
 
     /// Compare values of 2 registers

@@ -105,7 +105,11 @@ private:
 
     void consumeTo(Register r) {
         immutable(size_t) regSize = r.getDataCountForRegister();
-        immutable(ValData) val = consume();
+        static if (COMPRESS_CODE) {
+            immutable(ValData) val = consume(regSize);
+        } else {
+            immutable(ValData) val = consume();
+        }
         switch(regSize) {
             case 1:
                 registers[r].byte_ = val.ubyte_;
@@ -128,6 +132,25 @@ private:
         }
     }
 
+    bool flagHasFlags(Flag flags) {
+        return (registers.flg & flags) > 0;
+    }
+
+    bool hasEitherState(Flag expected, Flag expectedOff, bool flipLogic) {
+        return (
+            (!flipLogic && flagHasFlags(expected)) || 
+            (flipLogic && !flagHasFlags(expected))) || 
+            (expectedOff != 0 && !flagHasFlags(expectedOff));
+    }
+
+    void doJump(Flag expectedFlags, bool flipLogic, Flag expectedFlagsOff = 0) {
+        size_t to = consume().ptr_;//registers.gp[.register].ptrword;
+        if (expectedFlags == 0 && expectedFlagsOff != 0) jumpInstrPointer(to);
+
+        if (hasEitherState(expectedFlags, expectedFlagsOff, flipLogic))
+            jumpInstrPointer(to);
+    }
+
 public:
     /// Change the chunk being interpreted.
     vmResult interpret(Chunk* chunk) {
@@ -142,6 +165,14 @@ public:
         registers.ip += 2;
         return instr;
     }
+    
+    void jumpInstrPointer(size_t offset) {
+        registers.ip = chunk.instr.ptr+offset;
+    }
+    
+    size_t currentInstructionOffset() {
+        return cast(size_t)(registers.ip-chunk.instr.ptr);
+    }
 
     /// Run
     vmResult run() {
@@ -155,12 +186,77 @@ public:
         }
         stack.setup();
         while(true) {
+
+            // Show dissassembly in DEBUG mode.
             version(DEBUG) {
                 import std.stdio : writeln;
-                writeln(disasmInstr(chunk, cast(size_t)(registers.ip - chunk.instr.ptr)).toString);
+                //writeln(disasmInstr(chunk, cast(size_t)(registers.ip - chunk.instr.ptr)).toString);
             }
+
+            if (cast(size_t)(registers.ip - chunk.instr.ptr) > chunk.labelOffset) {
+                // The VM is done.
+                return vmResultOK;
+            }
+
+            // Fetch and execute next instruction.
             Instr instruction;
             switch((instruction = nextInstruction()).opcode) {
+
+                case (opCALL):
+                    size_t returnPoint = currentInstructionOffset;
+                    stack.push(returnPoint);
+                    doJump(0, false);
+                    continue;
+
+                case (opRET):
+                    size_t retPoint = stack.popRaw();
+                    jumpInstrPointer(retPoint);
+                    continue;
+
+                case (opJMP):
+                    doJump(0, false);
+                    continue;
+
+                case (opJZ):
+                    doJump(flagZero, false);
+                    continue;
+
+                case (opJNZ):
+                    doJump(flagZero, true);
+                    continue;
+
+                case (opJS):
+                    doJump(flagSign, false);
+                    continue;
+
+                case (opJNS):
+                    doJump(flagSign, true);
+                    continue;
+
+                case (opJE):
+                    doJump(flagEqual, false);
+                    continue;
+
+                case (opJNE):
+                    doJump(flagEqual, true);
+                    continue;
+
+                case (opJA):
+                    doJump(flagLargerThan, false);
+                    continue;
+
+                case (opJAE):
+                    doJump(flagLargerThan | flagEqual, false);
+                    continue;
+
+                case (opJB):
+                    doJump(flagLargerThan, true);
+                    continue;
+
+                case (opJBE):
+                    doJump(flagEqual, true, flagLargerThan);
+                    continue;
+
                 case (opMOVC):
                     consumeTo(consume().register);
                     continue;
@@ -186,6 +282,8 @@ public:
                     immutable(size_t) valueB = registers[y].qword;
                     immutable(size_t) outcome = valueA + valueB;
 
+                    registers[x].qword = outcome;
+
                     // TODO: Make this work properly.
                     if (outcome <= valueA && outcome <= valueB) 
                         registers.flg &= flagCarry;
@@ -197,6 +295,8 @@ public:
                     size_t valueA = registers[x].qword;
                     size_t valueB = registers[y].qword;
                     size_t outcome = valueA - valueB;
+
+                    registers[x].qword = outcome;
 
                     // TODO: Make this work properly.
                     if (outcome >= valueA && outcome >= valueB) 
@@ -231,9 +331,7 @@ public:
                     size_t offset = consume().ptr_;
                     registers[x].ptrword = stack.peek(offset);
                     continue;
-
-                case (opRET):
-                    return vmResultOK;
+                    
                 default:
                     writeln("FAIL ", cast(size_t)(registers.ip-chunk.instr.ptr), ": ", instruction.opcode);
                     return vmResultRuntimeError;
