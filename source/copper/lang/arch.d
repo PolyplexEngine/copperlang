@@ -256,19 +256,27 @@ alias OPCode = ubyte;
     /// Divide
     enum OPCode opDIV = 67;
 
+    /// FRAME
+    enum OPCode opFRME = 254;
 
-size_t getArgCount(OPCode code) {
+    /// HALT
+    enum OPCode opHALT = 255;
+
+
+ptrdiff_t getArgCount(OPCode code) {
     switch(code) {
         case (opPSH):               return 1;
         case (opPOP):               return 1;
         case (opPEEK):              return 2;
         case (opCALL):              return 1;
-        case (opRET):               return 0;
+        case (opRET):               return 1;
         case (opJMP):               return 1;
         case (opJZ):                return 1;
         case (opJNZ):               return 1;
         case (opJS):                return 1;
         case (opJNS):               return 1;
+        case (opJC):                return 1;
+        case (opJNC):               return 1;
         case (opJE):                return 1;
         case (opJNE):               return 1;
         case (opJA):                return 1;
@@ -277,7 +285,14 @@ size_t getArgCount(OPCode code) {
         case (opJBE):               return 1;
         case (opMOVC):              return 2;
         case (opADD):               return 2;
+        case (opSUB):               return 2;
+        case (opDIV):               return 2;
+        case (opMUL):               return 2;
         case (opCMP):               return 2;
+        case (opLDR):               return 2;
+        case (opSTR):               return 2;
+        case (opHALT):              return 0;
+        case (opFRME):              return 0;
         default:                    return 0;
     }
 }
@@ -342,6 +357,10 @@ string getString(OPCode opcode) {
             return "MUL";
         case (opDIV):
             return "DIV";
+        case (opFRME):
+            return "FRME";
+        case (opHALT):
+            return "HALT";
 
         default:
             return "<INVALID OPCODE>";

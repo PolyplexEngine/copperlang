@@ -1219,7 +1219,7 @@ public:
         // Scan the type mapping for this file.
         scanTypes();
 
-        return module_;
+        return module_();
     }
 
     TypeMapping getMapping() {

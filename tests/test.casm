@@ -1,0 +1,41 @@
+
+; push value 4 to stack/parameters
+movc 4, gp0
+push gp0
+
+; call factorial
+call fact
+
+; get the value, then pop the last values of the stack.
+peek 1, gp0
+pop 2
+
+halt
+
+fact:
+    peek 2, gp0
+    movc 1, gp1
+    
+    ; if n > 1 go to fact_0, else return 1 (from gp1)
+    cmp gp0, gp1
+    ja fact_0
+    push gp1
+    ret 1
+
+    fact_0:
+
+        ; call fact with n-1 as parameter
+        sub gp0, gp1
+        push gp0
+        call fact
+
+        ; get return value
+        peek 1, gp1
+        ; pop expended return value + parameters
+        pop 2
+
+        ; get N and calculate N * result, return it.
+        peek 2, gp0
+        mul gp0, gp1
+        push gp0
+        ret 1

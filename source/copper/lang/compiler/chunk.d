@@ -2,17 +2,226 @@ module copper.lang.compiler.chunk;
 import copper.lang.arch;
 import copper.lang.types;
 import std.traits;
+import std.stdio : writeln;
+
 private struct AddrMap {
     size_t to;
     size_t[] maps;
 }
 
+private template writeJMPA(string id) {
+    import std.format : format;
+    mixin(q{
+    /// Jump to address in the %s condition
+    void write%s(size_t address) {
+        chunk.write(op%s);
+        chunk.writeData!size_t(address);
+    }
+
+    /// Jump to address in the %s condition
+    void write%s(string label) {
+        chunk.write(op%s);
+        asLabel(label);
+    }}.format(id, id, id, id, id, id));
+}
+
+public class ChunkBuilder {
+private:
+    Chunk chunk;
+    AddrMap[string] labels;
+
+public:
+    this() {
+        chunk = Chunk(0, []);
+    }
+
+    void setLabel(string name, size_t to) {
+        if (name !in labels) {
+            labels[name] = AddrMap(to, []);
+        } else {
+            labels[name].to = to;
+        }
+    }
+
+    void setLabel(string name) {
+        setLabel(name, chunk.count);
+    }
+
+    void asLabel(string name) {
+        if (name !in labels) {
+            labels[name] = AddrMap(0, []);
+        }
+        labels[name].maps ~= chunk.count;
+        chunk.writeADDRPlaceholder();
+    }
+
+    Chunk* build() {
+        foreach(name, label; labels) {
+            version(DEBUG) writeln("Redirecting ", name, " to ", format(("#%0" ~ format("%d", size_t.sizeof) ~ "x"), label.to), "...");
+            foreach(target; label.maps) {
+                chunk.writeDataAt(label.to, target);
+            }
+        }
+        return &chunk;
+    }
+
+    /// Pop values off stack
+    void writePOP(size_t amount = 1) {
+        chunk.write(opPOP);
+        chunk.writeData(amount);
+    }
+
+    /// Push value to stack
+    void writePSH(Register register) {
+        chunk.write(opPSH);
+        chunk.writeData(register);
+    }
+
+    /// peek value from stack
+    void writePEEK(Register register, size_t offset) {
+        chunk.write(opPEEK);
+        chunk.writeData(register);
+        chunk.writeData(offset);
+    }
+
+    /// Call Copper subroutine
+    void writeCALL(size_t cuAddress) {
+        chunk.write(opCALL);
+        chunk.writeData(cuAddress);
+    }
+
+    /// Call Copper subroutine
+    void writeCALL(string label) {
+        chunk.write(opCALL);
+        asLabel(label);
+    }
+
+    /// Call a D function
+    void writeCALL(void* dptr) {
+        chunk.write(opCALLDPTR);
+        chunk.writeData(cast(size_t)dptr);
+    }
+
+    /// Return to caller
+    void writeRET() {
+        writeRET(0);
+    }
+
+    /// Return to caller
+    void writeRET(size_t returnValues) {
+        chunk.write(opRET);
+        chunk.writeData(returnValues);
+    }
+
+    /// Halt execution
+    void writeHALT() {
+        chunk.write(opHALT);
+    }
+
+    /// print frame info
+    void writeFRME() {
+        chunk.write(opFRME);
+    }
+
+    void writeJMPG(OPCode opcode, string label) {
+        chunk.write(opcode);
+        asLabel(label);
+    }
+
+    void writeJMPG(OPCode opcode, size_t addr) {
+        chunk.write(opcode);
+        chunk.writeData(addr);
+    }
+
+    mixin writeJMPA!("JMP");
+    mixin writeJMPA!("JZ");
+    mixin writeJMPA!("JNZ");
+    mixin writeJMPA!("JS");
+    mixin writeJMPA!("JNS");
+    mixin writeJMPA!("JC");
+    mixin writeJMPA!("JNC");
+    mixin writeJMPA!("JE");
+    mixin writeJMPA!("JNE");
+    mixin writeJMPA!("JA");
+    mixin writeJMPA!("JAE");
+    mixin writeJMPA!("JB");
+    mixin writeJMPA!("JBE");
+
+    /// Compare values of 2 registers
+    void writeCMP(Register x, Register y) {
+        chunk.write(opCMP);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Load value to register from address
+    void writeLDR(Register x, size_t address, ptrdiff_t addressOffset = 0) {
+        chunk.write(opLDR);
+        chunk.writeData(x);
+        chunk.writeData(address);
+        chunk.writeData(addressOffset);
+    }
+
+    /// Store value from register to address
+    void writeSTR(Register x, size_t address, ptrdiff_t addressOffset = 0) {
+        chunk.write(opSTR);
+        chunk.writeData(x);
+        chunk.writeData(address);
+        chunk.writeData(addressOffset);
+    }
+
+    /// Move value from one register to another
+    void writeMOV(Register x, Register y) {
+        chunk.write(opMOV);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Move constant value to register X
+    void writeMOVC(size_t value, Register x) {
+        chunk.write(opMOVC);
+        chunk.writeData(x);
+        chunk.writeData(value);
+    }
+
+    /// Add value from X with value from Y, store in X.
+    void writeADD(Register x, Register y) {
+        chunk.write(opADD);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Subtract value from X with value from Y, store in X.
+    void writeSUB(Register x, Register y) {
+        chunk.write(opSUB);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Mulitply value in x, by value in y. Store in GP0 (and GP1 if needed)
+    void writeMUL(Register x, Register y) {
+        chunk.write(opMUL);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Divide values from register X with register Y, store in X
+    void writeDIV(Register x, Register y) {
+        chunk.write(opDIV);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    override string toString() {
+        import std.conv : text;
+        build();
+        return chunk.instr.text;
+    }
+}
+
 public struct Chunk
 {
 private:
-    size_t addressMappings;
-    AddrMap[size_t] addressMap;
-
     void grow(size_t amount = 1)
     {
         if (capacity < count + amount)
@@ -32,6 +241,45 @@ private:
         place(data, count, length);
     }
 
+    void write(OPCode code, Option options) {
+        grow(Instr.sizeof);
+        import std.format : format;
+        writeln("#%04x".format(count), " -> ", getString(code));
+        Instr instr;
+        instr.opcode = code;
+        instr.options = options;
+        placeEnd(&instr, Instr.sizeof);
+    }
+
+    void write(OPCode code) {
+        write(code, 0);
+    }
+
+    void writeDataAt(T)(T data, size_t offset) {
+        grow(size_t.sizeof);
+
+        ChunkVal val = ChunkVal.constr(data);
+
+        // Apply the value.
+        instr[offset .. offset + val.as.ubyteArr.length] = val.as.ubyteArr;
+    }
+
+    void writeADDRPlaceholder() {
+        writeData!ulong(0);
+    }
+
+    void writeData(T)(T data)
+    {
+        grow(size_t.sizeof);
+
+        ChunkVal val = ChunkVal.constr(data);
+
+        // Apply the value.
+        instr[count .. count + val.as.ubyteArr.length] = val.as.ubyteArr;
+        static if (!COMPRESS_CODE) count += 8;
+        else count += T.sizeof;
+    }
+    
 public:
     /// count of chunks
     size_t count;
@@ -49,277 +297,16 @@ public:
         destroy(instr);
     }
 
-    size_t newAddrPtr(size_t to = -1) {
-        addressMap[addressMappings++] = AddrMap(to, []);
-        return addressMappings-1;
-    }
-
-    size_t newAddrPtr() {
-        addressMap[addressMappings++] = AddrMap(count, []);
-        return addressMappings-1;
-    }
-
-    void setAddrPtr(size_t map, size_t value) {
-        addressMap[map].to = value;
-    }
-
-    void setAddrPtr(size_t map) {
-        addressMap[map].to = count;
-    }
-
-    void addRef(size_t mapping, size_t position) {
-        addressMap[mapping].maps ~= position;
-    }
-
-    void updateRefs() {
-        foreach(mapping; addressMap) {
-            foreach(address; mapping.maps) {
-                writeDataAt(mapping.to, address);
-            }
-        }
-    }
-
     /// capacity
     size_t capacity()
     {
         return instr.length;
     }
 
-    void write(OPCode code, Option options) {
-        grow(Instr.sizeof);
-        Instr instr;
-        instr.opcode = code;
-        instr.options = options;
-        placeEnd(&instr, Instr.sizeof);
-    }
-
-    void write(OPCode code) {
-        grow(Instr.sizeof);
-        Instr instr;
-        instr.opcode = code;
-        instr.options = 0;
-        placeEnd(&instr, Instr.sizeof);
-    }
-
-    void writeDataAt(T)(T data, size_t offset) {
-        grow(size_t.sizeof);
-
-        ChunkVal val = ChunkVal.constr(data);
-
-        // Apply the value.
-        instr[offset .. offset + val.as.ubyteArr.length] = val.as.ubyteArr;
-    }
-
-    void writeData(T)(T data)
-    {
-        grow(size_t.sizeof);
-
-        ChunkVal val = ChunkVal.constr(data);
-
-        // Apply the value.
-        instr[count .. count + val.as.ubyteArr.length] = val.as.ubyteArr;
-        static if (!COMPRESS_CODE) count += 8;
-        else count += T.sizeof;
-    }
-    
     /// Gets the current position for use in labels
     size_t labelOffset() {
         return count;
     }
-
-    /// Pop values off stack
-    void writePOP(size_t amount = 1) {
-        write(opPOP);
-        writeData(amount);
-    }
-
-    /// Push value to stack
-    void writePSH(Register register) {
-        write(opPSH);
-        writeData(register);
-    }
-
-    /// peek value from stack
-    void writePEEK(Register register, size_t offset) {
-        write(opPEEK);
-        writeData(register);
-        writeData(offset);
-    }
-
-    /// Call Copper subroutine
-    void writeCALL(size_t cuAddress) {
-        write(opCALL);
-        writeData(cuAddress);
-    }
-
-    /// Call a D function
-    void writeCALL(void* dptr) {
-        write(opCALLDPTR);
-        writeData(cast(size_t)dptr);
-    }
-
-    /// Return to caller
-    void writeRET() {
-        write(opRET);
-    }
-
-    /// Jump to address
-    void writeJMP(size_t address) {
-        write(opJMP);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-
-    /// Jump to address if zero
-    void writeJZ(size_t address) {
-        write(opJZ);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-
-    /// Jump to address if not zero
-    void writeJNZ(size_t address) {
-        write(opJZ);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if sign
-    void writeJS(size_t address) {
-        write(opJS);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if not sign
-    void writeJNS(size_t address) {
-        write(opJNS);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if carry
-    void writeJC(size_t address) {
-        write(opJC);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if not carry
-    void writeJNC(size_t address) {
-        write(opJNC);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if equal
-    void writeJE(size_t address) {
-        write(opJE);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if not equal
-    void writeJNE(size_t address) {
-        write(opJNE);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if above
-    void writeJA(size_t address) {
-        write(opJE);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if above or equal
-    void writeJAE(size_t address) {
-        write(opJAE);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if below
-    void writeJB(size_t address) {
-        write(opJB);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-    
-    /// Jump to address if below or equal
-    void writeJBE(size_t address) {
-        write(opJBE);
-        addRef(address, count);
-        writeData!size_t(0);
-    }
-
-    /// Compare values of 2 registers
-    void writeCMP(Register x, Register y) {
-        write(opCMP);
-        writeData(x);
-        writeData(y);
-    }
-
-    /// Load value to register from address
-    void writeLDR(Register x, size_t address, ptrdiff_t addressOffset = 0) {
-        write(opLDR);
-        writeData(x);
-        writeData(address);
-        writeData(addressOffset);
-    }
-
-    /// Store value from register to address
-    void writeSTR(Register x, size_t address, ptrdiff_t addressOffset = 0) {
-        write(opSTR);
-        writeData(x);
-        writeData(address);
-        writeData(addressOffset);
-    }
-
-    /// Move value from one register to another
-    void writeMOV(Register x, Register y) {
-        write(opMOV);
-        writeData(x);
-        writeData(y);
-    }
-
-    /// Move constant value to register X
-    void writeMOVC(size_t value, Register x) {
-        write(opMOVC);
-        writeData(x);
-        writeData(value);
-    }
-
-    /// Add value from X with value from Y, store in X.
-    void writeADD(Register x, Register y) {
-        write(opADD);
-        writeData(x);
-        writeData(y);
-    }
-
-    /// Subtract value from X with value from Y, store in X.
-    void writeSUB(Register x, Register y) {
-        write(opSUB);
-        writeData(x);
-        writeData(y);
-    }
-
-    /// Mulitply value in x, by value in y. Store in GP0 (and GP1 if needed)
-    void writeMUL(Register x, Register y) {
-        write(opMUL);
-        writeData(x);
-        writeData(y);
-    }
-
-    /// Divide values from register X with register Y, store in X
-    void writeDIV(Register x, Register y) {
-        write(opDIV);
-        writeData(x);
-        writeData(y);
-    }
-
-
 
     void free()
     {

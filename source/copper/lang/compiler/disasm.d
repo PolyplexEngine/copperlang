@@ -48,7 +48,7 @@ DisAsmChunk[] disassemble(Chunk* chunk) {
 DisAsmChunk disasmInstr(Chunk* chunk, size_t offset) {
     ubyte instr = chunk.instr[offset++];
     Option opt = chunk.instr[offset++];
-    void* argPtr = cast(void*)(chunk.instr[offset..offset+(size_t.sizeof*instr.getArgCount)]);
+    void* argPtr = chunk.instr.ptr+offset; //cast(void*)(chunk.instr[offset..offset+(size_t.sizeof*instr.getArgCount)]);
     size_t[] args = (cast(size_t*)argPtr)[0..instr.getArgCount()];
     DisAsmChunk oChunk = DisAsmChunk(offset, (cast(OPCode)instr).getString(), args);
     return oChunk;

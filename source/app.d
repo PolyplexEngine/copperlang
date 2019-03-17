@@ -73,25 +73,14 @@ void testTComp() {
 		writeln("[ERROR]:\n", ex.msg.offsetByLines(8));
 	}
 	writeln("\n===================== bytecode =====================");
-	Chunk* tchunk = new Chunk(0, []);
-	size_t MAIN_FUNC = tchunk.newAddrPtr();
-	size_t END = tchunk.newAddrPtr();
-	size_t MAIN_FUNC_LOOP0 = tchunk.newAddrPtr();
-	tchunk.writeJMP(MAIN_FUNC_LOOP0);
+	
+	import copper.lang.casm.assembler;
+	Assembler assembler = new Assembler();
+	Chunk* outChunk = assembler.assemble(readText("tests/test.casm"));
 
-	tchunk.setAddrPtr(MAIN_FUNC);
-	tchunk.writeMOVC(1, regGP1);
-	tchunk.writeMOVC(1_000_000, regGP2);
-	tchunk.setAddrPtr(MAIN_FUNC_LOOP0);
-	tchunk.writeADD(regGP0, regGP1);
-	tchunk.writeCMP(regGP0, regGP2);
-	tchunk.writeJB(MAIN_FUNC_LOOP0);
-
-	tchunk.updateRefs();
-	size_t end = tchunk.labelOffset;
 	
 	VM vm;
-	writeln(vm.interpret(tchunk));
+	writeln(vm.interpret(outChunk));
 }
 
 void testFullComp() {

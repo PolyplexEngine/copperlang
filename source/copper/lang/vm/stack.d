@@ -2,7 +2,7 @@ module copper.lang.vm.stack;
 import copper.lang.types;
 import std.format;
 
-enum MaxStackSize = 10_000;
+enum MaxStackSize = 1_000_000;
 
 struct VMStack(size_t stackSize = MaxStackSize) {
 private:

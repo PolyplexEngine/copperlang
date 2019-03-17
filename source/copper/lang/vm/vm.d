@@ -136,18 +136,21 @@ private:
         return (registers.flg & flags) > 0;
     }
 
-    bool hasEitherState(Flag expected, Flag expectedOff, bool flipLogic) {
+    bool hasEitherState(Flag expected, bool flipLogic) {
         return (
             (!flipLogic && flagHasFlags(expected)) || 
-            (flipLogic && !flagHasFlags(expected))) || 
-            (expectedOff != 0 && !flagHasFlags(expectedOff));
+            (flipLogic && !flagHasFlags(expected)));
+    }
+
+    bool hasStateOff(Flag expected) {
+        return !flagHasFlags(expected);
     }
 
     void doJump(Flag expectedFlags, bool flipLogic, Flag expectedFlagsOff = 0) {
         size_t to = consume().ptr_;//registers.gp[.register].ptrword;
-        if (expectedFlags == 0 && expectedFlagsOff != 0) jumpInstrPointer(to);
+        if (expectedFlags == 0) jumpInstrPointer(to);
 
-        if (hasEitherState(expectedFlags, expectedFlagsOff, flipLogic))
+        if (hasEitherState(expectedFlags, flipLogic))
             jumpInstrPointer(to);
     }
 
@@ -190,7 +193,7 @@ public:
             // Show dissassembly in DEBUG mode.
             version(DEBUG) {
                 import std.stdio : writeln;
-                //writeln(disasmInstr(chunk, cast(size_t)(registers.ip - chunk.instr.ptr)).toString);
+                writeln(disasmInstr(chunk, cast(size_t)(registers.ip - chunk.instr.ptr)).toString);
             }
 
             if (cast(size_t)(registers.ip - chunk.instr.ptr) > chunk.labelOffset) {
@@ -203,14 +206,28 @@ public:
             switch((instruction = nextInstruction()).opcode) {
 
                 case (opCALL):
-                    size_t returnPoint = currentInstructionOffset;
+                    // Add 8 since CALL instruction params are 8 bytes wide.
+                    size_t returnPoint = currentInstructionOffset+8;
                     stack.push(returnPoint);
                     doJump(0, false);
                     continue;
 
                 case (opRET):
+
+                    // Fetch return values
+                    size_t retValCount = consume().ptr_;
+                    size_t[] returnValues;
+                    foreach(i; 0..retValCount)
+                        returnValues ~= stack.popRaw();
+
+                    // Get return point pointer.
                     size_t retPoint = stack.popRaw();
                     jumpInstrPointer(retPoint);
+
+                    // Push return values back to stack.
+                    foreach(retVal; returnValues) 
+                        stack.push(retVal);
+
                     continue;
 
                 case (opJMP):
@@ -331,7 +348,18 @@ public:
                     size_t offset = consume().ptr_;
                     registers[x].ptrword = stack.peek(offset);
                     continue;
-                    
+
+                case (opFRME):
+                    import std.stdio : writeln;
+                    writeln("===================== REGISTERS =====================\n"~registers.toString);  
+                    writeln("===================== STACK =====================\n"~stack.toString);   
+                    continue;
+
+                case (opHALT):
+                    writeln("HALTED.");
+                    return vmResultOK;
+
+
                 default:
                     writeln("FAIL ", cast(size_t)(registers.ip-chunk.instr.ptr), ": ", instruction.opcode);
                     return vmResultRuntimeError;
