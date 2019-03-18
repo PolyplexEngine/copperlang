@@ -13,7 +13,7 @@ private:
     ubyte* stackptr;
 
 public:
-    void setup() {
+    void clear() {
         stackptr = stack.ptr;
     }
 

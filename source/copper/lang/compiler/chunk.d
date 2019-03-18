@@ -25,14 +25,37 @@ private template writeJMPA(string id) {
     }}.format(id, id, id, id, id, id));
 }
 
+class SymbolTable {
+private:
+    // TODO: replace with proper symbol table
+    size_t[string] symbols;
+
+    void set(string name, size_t address) {
+        symbols[name] = address;
+    }
+
+public:
+    size_t get(string name) {
+        return symbols[name];
+    }
+}
+
+struct CObject {
+public:
+    Chunk* chunk;
+    SymbolTable symbols;
+}
+
 public class ChunkBuilder {
 private:
     Chunk chunk;
+    SymbolTable symbols;
     AddrMap[string] labels;
 
 public:
     this() {
         chunk = Chunk(0, []);
+        symbols = new SymbolTable();
     }
 
     void setLabel(string name, size_t to) {
@@ -41,6 +64,7 @@ public:
         } else {
             labels[name].to = to;
         }
+        symbols.set(name, to);
     }
 
     void setLabel(string name) {
@@ -55,14 +79,18 @@ public:
         chunk.writeADDRPlaceholder();
     }
 
-    Chunk* build() {
+    CObject* build() {
         foreach(name, label; labels) {
             version(DEBUG) writeln("Redirecting ", name, " to ", format(("#%0" ~ format("%d", size_t.sizeof) ~ "x"), label.to), "...");
             foreach(target; label.maps) {
                 chunk.writeDataAt(label.to, target);
             }
         }
-        return &chunk;
+        return new CObject(&chunk, symbols);
+    }
+
+    SymbolTable getTable() {
+        return symbols;
     }
 
     /// Pop values off stack
@@ -243,8 +271,8 @@ private:
 
     void write(OPCode code, Option options) {
         grow(Instr.sizeof);
-        import std.format : format;
-        writeln("#%04x".format(count), " -> ", getString(code));
+        //import std.format : format;
+        //writeln("#%04x".format(count), " -> ", getString(code));
         Instr instr;
         instr.opcode = code;
         instr.options = options;

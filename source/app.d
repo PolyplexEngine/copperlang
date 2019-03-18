@@ -76,11 +76,9 @@ void testTComp() {
 	
 	import copper.lang.casm.assembler;
 	Assembler assembler = new Assembler();
-	Chunk* outChunk = assembler.assemble(readText("tests/test.casm"));
-
-	
-	VM vm;
-	writeln(vm.interpret(outChunk));
+	CObject* object = assembler.assemble(readText("tests/test.casm"));
+	State state = State(object);
+	writeln("Meaning of Life is ", state.call("meaning_of_life"), "...");
 }
 
 void testFullComp() {

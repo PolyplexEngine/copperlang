@@ -809,7 +809,7 @@ public:
         chunkBuilder.writeMOVC(params[0], cast(Register)params[1]);
     }
 
-    Chunk* assemble(string code)
+    CObject* assemble(string code)
     {
         lexer = ASMLexer(code);
 
