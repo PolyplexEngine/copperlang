@@ -1,6 +1,6 @@
-module copper.lang.compiler.compiler;
-import copper.lang.parser.node;
-import copper.share.utils;
+module cucore.compiler;
+import cucore.node;
+import cucore;
 import std.stdio;
 
 /// A tag descriping which kind of type this is.
@@ -277,8 +277,4 @@ abstract class Compiler {
     /// Compile compiles an AST node, each implementation right now implements its own way of getting the result out
     /// A generic interface will be made eventually.
     abstract void compile(Node* root);
-}
-
-Compiler newJIT() {
-    return new LLVMCompiler();
 }
