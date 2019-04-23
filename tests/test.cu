@@ -6,12 +6,30 @@
 +/
 module myModule.thing;
 
-exdecl func myExternFunc();
+/// External D declaration for d_print.
+exdecl func d_print(string text);
 
-func timesTwo(int a, int b, int c) int {
-    return 999*a;
+/// Test add function
+func test_add(int x, int y) int {
+    return x + y;
 }
 
-func otherFunc(int x) int {
-    return x*2;
+/// Test subtract function
+func test_sub(int x, int y) int {
+    return x - y;
+}
+
+/// Test division function
+func test_div(int x, int y) int {
+    return x / y;
+}
+
+/// Test multiplication function
+func test_mul(int x, int y) int {
+    return x * y;
+}
+
+/// Final test; Hello, World!
+func test_helloWorld() {
+    d_print("Hello, world!");
 }
