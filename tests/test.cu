@@ -6,6 +6,8 @@
 +/
 module myModule.thing;
 
+exdecl func myExternFunc();
+
 func timesTwo(int a, int b, int c) int {
     return 999*a;
 }

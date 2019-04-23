@@ -363,10 +363,19 @@ private:
             typ.id = astReturnType;
             n.add(typ);
         }
-        // add body
-        n.add(funcBody());
 
-        consume(tkEndScope, "Expected '}' to end function scope!");
+        peekNext(&tk);
+        if (match(tk, [tkStartScope])) {
+            // add body
+            n.add(funcBody());
+            consume(tkEndScope, "Expected '}' to end function scope!");
+
+        } else if (!match(tk, [tkEndStatement])) {
+            error("Expected a body or ';'!");
+            return null;
+        } else {
+            consume(tkEndStatement, "Expected ';' to end function prototype declaration!");
+        }
 
         // return function
         return n;

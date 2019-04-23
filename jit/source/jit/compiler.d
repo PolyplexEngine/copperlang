@@ -1,9 +1,10 @@
 module copper.lang.compiler.jit.compiler;
-import copper.lang.parser.node;
-import copper.lang.compiler;
-import copper.share.utils;
-import copper.lang.parser;
-import copper.lang.token;
+import cucore.node;
+import cucore.compiler;
+import cucore.token;
+import cucore.ast;
+import cucore;
+import cuparser;
 import std.stdio;
 import llvm;
 
@@ -49,9 +50,6 @@ private:
         // Get the return type
         Node* returnType = paramListRoot.right.id == astReturnType ? paramListRoot.right : null;
         funcDecl.returnType = returnType !is null ? returnType.token.lexeme : "void";
-
-        LLVMFunctionType
-
     }
 
     void functionBody(Node* node)

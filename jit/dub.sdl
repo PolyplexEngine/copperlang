@@ -1,0 +1,9 @@
+name "cujit"
+description "LLVM-based Just-In-Time compiler for Copper"
+authors "Clipsey"
+copyright "Copyright © 2019, Clipsey"
+license "BSL-1.0"
+
+dependency "copper:cucore" version="*"
+dependency "copper:cuparser" version="*"
+dependency "llvm-d" version="~>2.4.1"

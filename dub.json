@@ -10,12 +10,13 @@
 	"subPackages": [
 		"./core",
 		"./lexer",
-		"./parser"
+		"./parser",
+		"./jit"
 	],
 	"dependencies": {
-		"llvm-d": "~>2.4.1",
 		"copper:cucore": "*",
 		"copper:culexer": "*",
-		"copper:cuparser": "*"
+		"copper:cuparser": "*",
+		"copper:cujit": "*"
 	}
 }
