@@ -1,4 +1,4 @@
-module copper.lang.compiler.chunk;
+module copper.lang.compiler.vm.chunk;
 import copper.lang.arch;
 import copper.lang.types;
 import std.traits;
@@ -36,6 +36,7 @@ private:
 
 public:
     size_t get(string name) {
+        if (name !in symbols) throw new Exception("No symbol with name "~name~" found!");
         return symbols[name];
     }
 }
@@ -64,11 +65,19 @@ public:
         } else {
             labels[name].to = to;
         }
-        symbols.set(name, to);
     }
 
     void setLabel(string name) {
         setLabel(name, chunk.count);
+    }
+
+    void setSymbol(string name, size_t to) {
+        setLabel(name, to);
+        symbols.set(name, to);
+    }
+
+    void setSymbol(string name) {
+        setSymbol(name, chunk.count);
     }
 
     void asLabel(string name) {
@@ -100,9 +109,18 @@ public:
     }
 
     /// Push value to stack
-    void writePSH(Register register) {
-        chunk.write(opPSH);
-        chunk.writeData(register);
+    void writePSHR(Register register) {
+        writePSH(optRegister, cast(size_t)register);
+    }
+    /// Push value to stack
+    void writePSHV(size_t value) {
+        writePSH(optValue, value);
+    }
+
+    /// Push value to stack
+    void writePSH(Option option, size_t value) {
+        chunk.write(opPSH, option);
+        chunk.writeData(value);
     }
 
     /// peek value from stack
@@ -176,8 +194,29 @@ public:
     mixin writeJMPA!("JBE");
 
     /// Compare values of 2 registers
-    void writeCMP(Register x, Register y) {
-        chunk.write(opCMP);
+    void writeCMPRR(Register x, Register y) {
+        chunk.write(opCMP, optRegister);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Compare values of 2 registers
+    void writeCMPVR(size_t x, Register y) {
+        chunk.write(opCMP, optValue1 | optRegister2);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Compare values of 2 registers
+    void writeCMPRV(Register x, size_t y) {
+        chunk.write(opCMP, optValue2 | optRegister1);
+        chunk.writeData(x);
+        chunk.writeData(y);
+    }
+
+    /// Compare values of 2 registers
+    void writeCMPVV(size_t x, size_t y) {
+        chunk.write(opCMP, optValue);
         chunk.writeData(x);
         chunk.writeData(y);
     }
@@ -196,6 +235,20 @@ public:
         chunk.writeData(x);
         chunk.writeData(address);
         chunk.writeData(addressOffset);
+    }
+
+    /// Store value from register to address
+    void writeALLOCV(Register output, size_t length) {
+        chunk.write(opSTR, optRegister1 | optValue2);
+        chunk.writeData(output);
+        chunk.writeData(length);
+    }
+
+    /// Store value from register to address
+    void writeALLOCR(Register output, Register length) {
+        chunk.write(opSTR, optRegister);
+        chunk.writeData(output);
+        chunk.writeData(length);
     }
 
     /// Move value from one register to another
@@ -271,8 +324,8 @@ private:
 
     void write(OPCode code, Option options) {
         grow(Instr.sizeof);
-        //import std.format : format;
-        //writeln("#%04x".format(count), " -> ", getString(code));
+        import std.format : format;
+        writeln("#%04x".format(count), " -> ", getString(code), " (" ~ "%04x".format(options) ~ ")");
         Instr instr;
         instr.opcode = code;
         instr.options = options;
@@ -339,5 +392,19 @@ public:
     void free()
     {
         destroy(instr);
+    }
+
+    string toString() {
+        import std.format : format;
+        string oStr;
+        foreach(i; 0..count) {
+            size_t offs = i;
+            size_t offsLen = offs+1;
+
+            ubyte val = (ValData.create(instr[offs..offsLen])).byte_;
+
+            oStr ~= "%02x ".format(val);
+        }
+        return oStr;
     }
 }

@@ -3,7 +3,7 @@
     P much forcefully ripped most of the code from the copperlang lexer to make this.
 */
 module copper.lang.casm.assembler;
-import copper.lang.compiler.chunk;
+import copper.lang.compiler.vm.chunk;
 import copper.lang.arch;
 import std.stdio;
 import std.conv;
@@ -89,6 +89,9 @@ enum asmTokenId tkLDR = 32;
 
 /// store
 enum asmTokenId tkSTR = 33;
+
+/// allocate
+enum asmTokenId tkALLOC = 34;
 
 /// move 
 enum asmTokenId tkMOV = 44;
@@ -209,6 +212,7 @@ OPCode tokenToOp(asmTokenId tkid)
         mixin(tokenOp("CMP"));
         mixin(tokenOp("LDR"));
         mixin(tokenOp("STR"));
+        mixin(tokenOp("ALLOC"));
         mixin(tokenOp("HALT"));
         mixin(tokenOp("FRME"));
     default:
@@ -226,8 +230,18 @@ shared static this()
 {
     // Stack
     keywords["pop"] = tkPOP;
+
     keywords["push"] = tkPSH;
+    keywords["push.byte"] = tkPSH;
+    keywords["push.word"] = tkPSH;
+    keywords["push.dword"] = tkPSH;
+
+    // TODO: remove this?
     keywords["psh"] = tkPSH;
+    keywords["psh.byte"] = tkPSH;
+    keywords["psh.word"] = tkPSH;
+    keywords["psh.dword"] = tkPSH;
+
     keywords["peek"] = tkPEEK;
 
     // Calling
@@ -253,6 +267,7 @@ shared static this()
     // Data mod
     keywords["ldr"] = tkLDR;
     keywords["str"] = tkSTR;
+    keywords["alloc"] = tkALLOC;
     keywords["mov"] = tkMOV;
     keywords["movc"] = tkMOVC;
 
@@ -376,6 +391,7 @@ private:
     char advance()
     {
         current++;
+        if (current >= source.length) current = source.length;
         return source[current - 1];
     }
 
@@ -734,6 +750,18 @@ private:
         return (match(tk, [tkInteger, tkIdentifier]) || matchRegisters(tk));
     }
 
+    bool hasNumericParam() {
+        ASMToken tk;
+        peekNext(&tk);
+        return (match(tk, [tkInteger]));
+    }
+
+    bool hasRegisterParam() {
+        ASMToken tk;
+        peekNext(&tk);
+        return matchRegisters(tk);
+    }
+
     bool hasIdentifierParam() {
         ASMToken tk;
         peekNext(&tk);
@@ -746,28 +774,42 @@ private:
         return tk.lexeme;
     }
 
-    size_t[] parseNumericParams(bool expectRegister = true, bool expectAddress = true, string funcName = __FUNCTION__) {
+    size_t parseNumericParam(bool expectRegister = true, bool expectAddress = true, string funcName = __FUNCTION__) {
         ASMToken tk;
-        ASMToken tk2;
-        size_t[] output;
-        do {
-            if (match(tk2, [tkSplit])) consume(tkSplit, "Expected ','! in "~funcName);
-            getToken(&tk);
-            peekNext(&tk2);
+        peekNext(&tk);
+        if (expectRegister && matchRegisters(tk))
+        {
+            advance();
+            return tokenToReg(tk.id);
+        }
+        
+        if (expectAddress && tk.id == tkInteger) {
+            advance();
+            return to!size_t(tk.lexeme);
+        }
+        error("Expected intergral or register, got "~tk.lexeme ~" ("~ tk.id.text ~ ")! in "~funcName);
+        return 0;
+    }
 
-            if (expectRegister && matchRegisters(tk))
-            {
-                output ~= tokenToReg(tk.id);
-                continue;
-            }
-            
-            if (expectAddress && tk.id == tkInteger) {
-                output ~= to!size_t(tk.lexeme);
-                continue;
-            }
-            error("Expected intergral or register, got "~tk.lexeme ~" ("~ tk.id.text ~ ")! in "~funcName);
-        } while(match(tk2, [tkSplit]) && !eof);
+    size_t[] parseNumericParams(bool expectRegister = true, bool expectAddress = true, size_t amount = 0, string funcName = __FUNCTION__) {
+        ASMToken tk;
+        size_t[] output;
+        size_t i = 0;
+        do {
+            output ~= parseNumericParam(expectRegister, expectAddress);
+            peekNext(&tk);
+            if (match(tk, [tkSplit])) consume(tkSplit, "Expected ','! in "~funcName);
+            i++;
+        } while(match(tk, [tkSplit]) && !eof && (amount == 0 || i < amount));
         return output;
+    }
+
+    Option getSizeOptionFromLexeme(string lexeme) {
+        import std.algorithm.searching : endsWith;
+        if (lexeme.endsWith(".byte")) return optSizeBYTE;
+        if (lexeme.endsWith(".word")) return optSizeWORD;
+        if (lexeme.endsWith(".dword")) return optSizeDWORD;
+        return cast(Option)0;
     }
 
 public:
@@ -782,10 +824,16 @@ public:
         return chunkBuilder;
     }
 
-    void assemblePSH()
+    void assemblePSH(string lexeme)
     {
-        size_t[] params = parseNumericParams(true, false);
-        chunkBuilder.writePSH(cast(Register)params[0]);
+        if (hasRegisterParam) {
+            size_t[] params = parseNumericParams(true, false);
+            chunkBuilder.writePSHR(cast(Register)params[0]);
+        } else {
+            size_t[] params = parseNumericParams(false, true);
+            Option option = optValue | getSizeOptionFromLexeme(lexeme);
+            chunkBuilder.writePSH(option, params[0]);
+        }
     }
 
     void assemblePOP()
@@ -824,7 +872,7 @@ public:
             case tkLabel:
                 advance();
                 // Set label
-                chunkBuilder.setLabel(tk.lexeme[0 .. $ - 1]);
+                chunkBuilder.setSymbol(tk.lexeme[0 .. $ - 1]);
                 continue;
 
             case tkMOVC:
@@ -844,7 +892,7 @@ public:
 
             case tkPSH:
                 advance();
-                assemblePSH();
+                assemblePSH(tk.lexeme);
                 continue;
 
             // Call is technically a jump and uses the same syntax.
@@ -863,7 +911,6 @@ public:
                 advance();
                 if (hasIdentifierParam()) {
                     string jto = parseIdentifier();
-                    writeln("JUMPTO=", jto);
                     chunkBuilder.writeJMPG(tokenToOp(tk.id), jto);
                     continue;
                 }
@@ -873,10 +920,40 @@ public:
 
             case tkCMP:
                 advance();
-                size_t[] params = parseNumericParams(true, false);
-                chunkBuilder.writeCMP(cast(Register)params[0], cast(Register)params[1]);
+                bool val1Register = hasRegisterParam();
+                size_t val1 = parseNumericParam(val1Register, !val1Register);
+                
+                consume(tkSplit, "Expected ','!");
+
+                bool val2Register = hasRegisterParam();
+                size_t val2 = parseNumericParam(val2Register, !val2Register);
+
+                if (val1Register && val2Register)   chunkBuilder.writeCMPRR(cast(Register)val1, cast(Register)val2);
+                if (!val1Register && val2Register)  chunkBuilder.writeCMPRV(cast(Register)val1, val2);
+                if (val1Register && !val2Register)  chunkBuilder.writeCMPVR(val1, cast(Register)val2);
+                if (!val1Register && !val2Register) chunkBuilder.writeCMPVV(val1, val2);
                 continue;
             
+            case tkLDR:
+
+            case tkSTR:
+
+
+            case tkALLOC:
+                advance();
+
+                // Doing this in reverse order to seem more human readable.
+                bool val2Register = hasRegisterParam();
+                size_t val2 = parseNumericParam(hasRegisterParam(), !hasRegisterParam());
+
+                consume(tkSplit, "Expected ','!");
+
+                Register val1 = cast(Register)parseNumericParam(true, false);
+
+                if (val2Register)  chunkBuilder.writeALLOCR(val1, cast(Register)val2);
+                if (!val2Register) chunkBuilder.writeALLOCV(val1, val2);
+                continue;
+
             case tkADD:
                 advance();
                 size_t[] params = parseNumericParams(true, false);

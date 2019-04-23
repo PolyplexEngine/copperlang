@@ -75,13 +75,12 @@ private:
     }
 
     void error(string errMsg, Token* tkRef = null) {
-        writeln((tkRef is null));
         if (tkRef is null) {
             Token tk;
             peekNext(&tk);
-            throw new Exception(getErrorText(lexer.getSource, tk, errMsg));
+            throw new Exception(getOutText(lexer.getSource, tk, errMsg));
         }
-        throw new Exception(getErrorText(lexer.getSource, *tkRef, errMsg));
+        throw new Exception(getOutText(lexer.getSource, *tkRef, errMsg));
     }
 
     // impl
@@ -356,8 +355,10 @@ private:
         n.add(paramlist());
         
         Node* typ = type();
-        if (typ !is null) n.add(typ);
-
+        if (typ !is null) {
+            typ.id = astReturnType;
+            n.add(typ);
+        }
         // add body
         n.add(funcBody());
 

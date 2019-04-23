@@ -1,5 +1,5 @@
-module copper.lang.compiler.disasm;
-import copper.lang.compiler.chunk;
+module copper.lang.compiler.vm.disasm;
+import copper.lang.compiler.vm.chunk;
 import copper.lang.arch;
 import std.format;
 

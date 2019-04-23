@@ -65,6 +65,9 @@ enum ASTTId astParameterList = 31;
 /// A list of parameter values
 enum ASTTId astParameters = 32;
 
+/// Return type of a function.
+enum ASTTId astReturnType = 33;
+
 /// An identifier
 enum ASTTId astIdentifier = 40;
 

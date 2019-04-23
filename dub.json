@@ -6,5 +6,8 @@
 	],
 	"copyright": "Copyright © 2019, Clipsey",
 	"name": "copperlang",
-	"versions": ["DEBUG"]
+	"versions": ["DEBUG", "LLVM_Load"],
+	"dependencies": {
+		"llvm-d": "~>2.4.1"
+	}
 }

@@ -62,23 +62,38 @@ bool lex(string fileName) {
 	return true;
 }
 
-void testTComp() {
+void testCompilation() {
 	writeln("\n===================== tests/test.cu =====================");
+	auto parser = new Parser(readText("tests/test.cu"));
+
+	/*CopperCompiler compiler = new CopperCompiler();
+	Node* n = parser.parse();
+	if (n !is null) { 
+		writeln(n.toString());
+		CObject* obj = compiler.compile(n);
+		if (obj !is null) {
+			State* state = new State(obj);
+			//writeln("BYTECODE= ", obj.chunk.toString);
+			writeln("Returned value ", state.call("timesTwo.int.int.int.int", 4, 3, 2));
+		}
+	}*/
+}
+
+void testTComp() {
 	try {
-		lex("tests/test.cu");
-		auto parser = new Parser(readText("tests/test.cu"));
-		Node* n = parser.parse();
-		if (n !is null) writeln(n.toString());
+		//testCompilation();
 	} catch(Exception ex) {
-		writeln("[ERROR]:\n", ex.msg.offsetByLines(8));
+		writeln(ex.msg);
 	}
+
 	writeln("\n===================== bytecode =====================");
 	
-	import copper.lang.casm.assembler;
+	/*import copper.lang.casm.assembler;
 	Assembler assembler = new Assembler();
 	CObject* object = assembler.assemble(readText("tests/test.casm"));
-	State state = State(object);
-	writeln("Meaning of Life is ", state.call("meaning_of_life"), "...");
+	State* state = new State(object);
+	writeln("BYTECODE= ", object.chunk.toString);
+	writeln("BinRet: ", state.call("factorial"), "...");*/
 }
 
 void testFullComp() {

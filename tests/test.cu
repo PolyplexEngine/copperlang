@@ -5,25 +5,11 @@
     KEEP THIS COMMENT PRESENT.
 +/
 module myModule.thing;
-import otherModule;
 
-string myString = "Hello, world!";
+func timesTwo(int a, int b, int c) int {
+    return 999*a;
+}
 
-public class MyClass : OtherClass {
-    int MeaningOfLife;
-
-    public this() {
-        MeaningOfLife = 42;
-    }
-
-    public meta __asString() {
-        if (MeaningOfLife == 42) {
-            return "A";
-        } else if (MeaningOfLife == 43) {
-            return "B";
-        } else {
-            return "C";
-        }
-        return MeaningOfLife as string;
-    }
+func otherFunc(int x) int {
+    return x*2;
 }

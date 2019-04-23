@@ -1,4 +1,7 @@
 module copper.lang.vm.state;
+import copper.lang.compiler.vm.chunk;
+import copper.lang.compiler.vm.compiler;
+import copper.lang.compiler.vm.disasm;
 import copper.lang.compiler;
 import copper.lang.vm;
 
@@ -18,8 +21,12 @@ package:
     /// Fetches the next instruction.
     Instr next() {
         Instr instr = *cast(Instr*)(registers.ip);
-        registers.ip += 2;
+        registers.ip += Instr.sizeof;
         return instr;
+    }
+
+    bool eof() {
+        return offset >= chunk.count;
     }
 
 public:
@@ -60,18 +67,25 @@ public:
         writeln("===================== STACK =====================\n"~stack.toString);   
     }
 
-    size_t call(string name, size_t[] parameters = [], size_t returnCount = 1) {
+    size_t call(size_t returnCount = 1, T...)(string name, T args) {
         stack.clear();
         jumpTo(symbolTable.get(name));
-        foreach(param; parameters) stack.push(param);
-        
+        size_t argSize;
+        foreach(arg; args) {
+            stack.push!(typeof(arg))(arg);
+            argSize += arg.sizeof;
+            writeln("Pushing ", typeid(arg), " with value ", arg, " of size ", arg.sizeof);
+        }
         // Return address is "null" pointer
-        stack.push(0);
+        stack.push!size_t(0);
         do {
-            if (VM.execute(&this) == opRET) {
-                if ((stack.stackOffset/size_t.sizeof) <= parameters.length+returnCount) break;
+            OPCode ran = VM.execute(&this);
+            if (ran == opHALT) return 0;
+            if (ran == opRET) {
+                if ((stack.stackOffset/size_t.sizeof) <= argSize) break;
             }
+            
         } while (true);
-        return stack.popRaw();
+        return stack.popRaw!size_t;
     }
 }

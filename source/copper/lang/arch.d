@@ -12,13 +12,73 @@ struct Instr {
     Option options;
 }
 
-alias Option = ubyte;
-    enum Option optSValue       = 0b10000000;
-    enum Option optOffset       = 0b01000000;
-    enum Option opt1Register    = 0b00001000;
-    enum Option opt1Address     = 0b00000100;
-    enum Option opt2Register    = 0b00000010;
-    enum Option opt2Address     = 0b00000001;
+alias Option = ushort;
+    /// Contains a single value
+    enum Option optValue                    = 0b00000000_00011000;
+    
+    /// First parameter is a value
+    enum Option optValue1                   = 0b00000000_00010000;
+    
+    /// Second parameter is a value
+    enum Option optValue2                   = 0b00000000_10001000;
+
+
+    /// Contains a single register
+    enum Option optRegister                 = 0b00000000_00100100;
+    
+    /// First parameter is a register
+    enum Option optRegister1                = 0b00000000_00100000;
+    
+    /// Second parameter is a register
+    enum Option optRegister2                = 0b00000000_00000100;
+
+
+    /// Contains a single address
+    enum Option optAddress                  = 0b00000000_01000010;
+    
+    /// First parameter is a address
+    enum Option optAddress1                 = 0b00000000_01000000;
+    
+    /// Second parameter is a address
+    enum Option optAddress2                 = 0b00000000_00000010;
+
+    
+    /// First parameter has an offset
+    enum Option optOffset1                  = 0b00000000_10000000;
+    
+    /// Second parameter has an offset
+    enum Option optOffset2                  = 0b00000000_00000001;
+    
+
+    /// First parameter has an negative offset
+    enum Option optOffset1Negative          = 0b00000001_00000000;
+    
+    /// Second parameter has an negative offset
+    enum Option optOffset2Negative          = 0b00000010_00000000;
+
+
+
+    /// Instruction operates on bytes
+    enum Option optSizeBYTE                 = 0b10000000_00000000;
+    
+    /// Instruction operates on words
+    enum Option optSizeWORD                 = 0b01000000_00000000;
+    
+    /// Instruction operates on dwords
+    enum Option optSizeDWORD                = 0b11000000_00000000;
+
+size_t getDataSizeForOption(Option option) {
+    switch(option & 0b11000000_00000000) {
+        case(optSizeBYTE):
+            return 1;
+        case(optSizeWORD):
+            return 2;
+        case(optSizeDWORD):
+            return 4;
+        default:
+            return 8;
+    }
+}
 
 //              CPU Flags               \\
 /// Flags, NC* flags are placeholders and might have use later.
@@ -237,6 +297,9 @@ alias OPCode = ubyte;
     /// store
     enum OPCode opSTR = 33;
 
+    /// allocate
+    enum OPCode opALLOC = 34;
+
 
     /// move 
     enum OPCode opMOV = 44;
@@ -291,6 +354,7 @@ ptrdiff_t getArgCount(OPCode code) {
         case (opCMP):               return 2;
         case (opLDR):               return 2;
         case (opSTR):               return 2;
+        case (opALLOC):             return 2;
         case (opHALT):              return 0;
         case (opFRME):              return 0;
         default:                    return 0;
@@ -345,6 +409,8 @@ string getString(OPCode opcode) {
             return "LDR";
         case (opSTR):
             return "STR";
+        case (opALLOC):
+            return "ALLOC";
         case (opMOV):
             return "MOV";
         case (opMOVC):

@@ -7,7 +7,7 @@ enum MaxStackSize = 1_000_000;
 struct VMStack(size_t stackSize = MaxStackSize) {
 private:
     // The actual stack, aligned with pointer length * stacksize bytes
-    ubyte[MaxStackSize*8] stack;
+    ubyte[MaxStackSize] stack;
 
     // the stack pointer
     ubyte* stackptr;
@@ -17,27 +17,42 @@ public:
         stackptr = stack.ptr;
     }
 
+    void push(size_t size, void* value) {
+        stackptr[0..size] = (cast(ubyte*)value)[0..size];
+        stackptr += size;
+    }
+
+    void push(T)(T* value) {
+        stackptr[0..T.sizeof] = (cast(ubyte*)(cast(void*)value))[0..T.sizeof];
+        stackptr += T.sizeof;
+    }
+
     void push(T)(T value) {
-        push(ValData.create!T(value));
+        push!T(&value);
     }
 
-    void push(ValData val) {
-        stackptr[0..8] = val.ubyteArr;
-        stackptr += ValData.sizeof;
+    void push(T)(T[] value) {
+        push!T(value.ptr);
     }
 
-    size_t peek(size_t offset) {
-        return cast(size_t)*(stackptr-(offset*8));
+    T peek(T)(ptrdiff_t offset) {
+        void* offs = cast(void*)(stackptr+offset);
+        return *(cast(T*)offs);
     }
 
-    size_t popRaw() {
+    T popRaw(T)() {
         // point at next element
-        stackptr -= 8;
-        return cast(size_t)*stackptr;
+        stackptr -= T.sizeof;
+        return cast(T)*stackptr;
+    }
+
+    void shift(size_t bytes, size_t over) {
+        size_t sOffset = stackOffset;
+        stack[sOffset-bytes-over..sOffset-over] = stack[sOffset-bytes..sOffset];
     }
 
     void pop(size_t count) {
-        stackptr -= count*8;
+        stackptr -= count;
     }
 
     size_t stackOffset() {
@@ -46,13 +61,8 @@ public:
 
     string toString() {
         string oStr;
-        foreach(i; 0..(stackOffset()/8)) {
-            size_t offs = i*8;
-            size_t offsLen = offs+8;
-
-            size_t val = (ValData.create(stack[offs..offsLen])).ptr_;
-
-            oStr ~= "%04x: %08x".format(offs, val) ~ "\n";
+        foreach(i; 0..stackOffset()) {
+            oStr ~= "%02x ".format(stack[i]);
         }
         return oStr;
     }

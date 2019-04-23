@@ -323,7 +323,7 @@ enum TokenId tkPanic = 255;
 
 /// A Token
 public struct Token {
-private:
+package:
     string source;
 
 public:

@@ -72,10 +72,26 @@ struct Registers {
 
         string outString = "";
         foreach(id, value; gp) {
-            outString ~= format("GP%s: %08x\n", id, value.qword);
+            outString ~= format("GP%s: #%016x (hex)\n", id, value.qword);
         }
-        outString ~= format("FLG: %016b\n", flg);
+        outString ~= "\nfloating point\n";
+        outString ~= format("FP0: #%08x         (hex)\n", fp0.floatToHexable);
+        outString ~= format("FP1: #%08x         (hex)\n", fp1.floatToHexable);
+        outString ~= format("FP2: #%016x (hex + highp)\n", fp2.doubleToHexable);
+        outString ~= format("FP3: #%016x (hex + highp)\n", fp3.doubleToHexable);
+        outString ~= "\nflags\n";
+        outString ~= format("FLG:  %016b (binary)\n", flg);
         
         return outString;
     }
+}
+
+private uint floatToHexable(float val) {
+    void* valST = cast(void*)&val;
+    return *cast(uint*)valST;
+}
+
+private ulong doubleToHexable(double val) {
+    void* valST = cast(void*)&val;
+    return *cast(ulong*)valST;
 }

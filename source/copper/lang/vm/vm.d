@@ -1,9 +1,11 @@
 module copper.lang.vm.vm;
 import copper.lang.compiler;
+import copper.lang.compiler.vm.disasm;
 import copper.lang.vm.stack;
 import copper.lang.types;
 import copper.lang.arch;
 import copper.lang.vm.state;
+import std.conv;
 
 alias vmResult = ubyte;
 
@@ -14,11 +16,27 @@ enum vmResultRuntimeError = 129;
 
 private {
 
+    bool hasOption(Option option, Option has) {
+        import std.format : format;
+        //writeln("%08b\n%08b = \n%08b".format(option, has, (option & has)));
+        return (option & has) == has;
+    }
+
     /// Consumes an argument
     ValData consume(State* state, size_t sz = 8) {
         ValData retVal = ValData.create(state.registers.ip[0..sz]);
         state.registers.ip += sz;
         return retVal;
+    }
+
+    T consume(T)(State* state) {
+        T retval = *cast(T*)(cast(void*)state.registers.ip)[0..T.sizeof];
+        state.registers.ip += T.sizeof;
+        return retval;
+    }
+
+    void pushTo(State* state, size_t size, void* data) {
+        state.stack.push(size, data);
     }
 
     void consumeTo(State* state, Register r) {
@@ -70,7 +88,6 @@ private {
 
 struct VM {
 public:
-    import std.stdio : writeln;
 
     /// Executes a single instruction in the specified state.
     static OPCode execute(State* state) {
@@ -85,21 +102,13 @@ public:
                 break;
 
             case (opRET):
-
                 // Fetch return values
-                size_t retValCount = state.consume().ptr_;
-                size_t[] returnValues;
-                foreach(i; 0..retValCount)
-                    returnValues ~= state.stack.popRaw();
+                size_t bytesToPreserve = state.consume().ptr_;
 
                 // Get return point pointer.
-                size_t retPoint = state.stack.popRaw();
+                size_t retPoint = state.stack.peek!size_t(-(bytesToPreserve+size_t.sizeof));
                 state.jumpTo(retPoint);
-
-                // Push return values back to stack.
-                foreach(retVal; returnValues) 
-                    state.stack.push(retVal);
-
+                state.stack.shift(bytesToPreserve, size_t.sizeof);
                 break;
 
             case (opJMP):
@@ -151,11 +160,21 @@ public:
                 break;
 
             case (opCMP):
-                Register x = state.consume().register;
-                Register y = state.consume().register;
+                size_t valueA;
+                size_t valueB;
+            
+                if (instruction.options.hasOption(optRegister1)) {
+                    valueA = state.registers[state.consume().register].ptrword;
+                } else {
+                    valueA = state.consume().ptr_;
+                }
 
-                immutable(size_t) valueA = state.registers[x].qword;
-                immutable(size_t) valueB = state.registers[y].qword;
+                if (instruction.options.hasOption(optRegister2)) {
+                    valueB = state.registers[state.consume().register].ptrword;
+                } else {
+                    valueB = state.consume().ptr_;
+                }
+
 
                 // Clear flags.
                 state.registers.flg = 0;
@@ -163,6 +182,25 @@ public:
                 if (valueA == valueB) state.registers.flg |= flagEqual;
                 if (valueA > valueB) state.registers.flg  |= flagLargerThan;
                 break;
+
+            case (opALLOC):
+                import core.memory : GC;
+                Register store = state.consume().register;
+                size_t length;
+
+                if (instruction.options.hasOption(optRegister2)) {
+                    length = state.registers[state.consume().register].ptrword;
+                } else {
+                    length = state.consume().ptr_;
+                }
+
+                void* allocMem = GC.malloc(length);
+
+                // TODO: put allocated memory on to an allocation list of some sort.
+
+                state.registers[store].ptrword = cast(size_t)allocMem;
+                break;
+
 
             case (opADD):
                 Register x = state.consume().register;
@@ -206,9 +244,19 @@ public:
                 break;
             
             case (opPSH):
-                Register x = state.consume().register;
-                state.stack.push(state.registers[x].qword);
-                break;
+                if (instruction.options.hasOption(optRegister)) {
+                    Register x = state.consume().register;
+                    size_t dataSize = x.getDataCountForRegister();
+                    state.pushTo(dataSize, &(state.registers[x].qword));
+                    break;
+                }
+                if (instruction.options.hasOption(optValue)) {
+                    size_t x = state.consume().ptr_;
+                    size_t dataSize = getDataSizeForOption(instruction.options);
+                    state.pushTo(dataSize, &x);
+                    break;
+                }
+                throw new Exception("Invalid push parameters!");
 
             case (opPOP):
                 size_t amount = state.consume().ptr_;
@@ -217,8 +265,9 @@ public:
 
             case (opPEEK):
                 Register x = state.consume().register;
-                size_t offset = state.consume().ptr_;
-                state.registers[x].ptrword = state.stack.peek(offset);
+                ptrdiff_t offset = state.consume!ptrdiff_t;
+                size_t val = state.stack.peek!size_t(-offset);
+                state.registers[x].ptrword = val;
                 break;
 
             case (opFRME):
@@ -229,7 +278,7 @@ public:
                 break;
 
             default:
-                throw new Exception("Invalid token!");
+                throw new Exception("Invalid instruction! "~instruction.opcode.text ~ " @ " ~ state.offset.text);
                 
                 // writeln("FAIL ", cast(size_t)(state.registers.ip-chunk.instr.ptr), ": ", instruction.opcode);
                 // break;

@@ -103,7 +103,7 @@ private:
 
     void internalErrFunc(string source, Token tk, string error)
     {
-        writeln(source.getErrorText(tk, error));
+        writeln(source.getOutText(tk, error));
     }
 
     // Lexing utils

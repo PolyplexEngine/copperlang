@@ -9,6 +9,14 @@ string offsetBy(string text, size_t offset) {
     return offsetStr ~ text;
 }
 
+string repeat(string text, size_t times) {
+    string output = "";
+    foreach(i; 0..times) {
+        output ~= text;
+    }
+    return output;
+}
+
 string offsetByLines(string text, size_t offset) {
     import std.string : splitLines;
     string outLines;
@@ -79,7 +87,7 @@ strArea getAppropriateStringArea(string source, Token tk) {
     return strArea(areaStart, areaEnd, false, true);
 }
 
-string getErrorText(string source, Token tk, string error) {
+string getOutText(string source, Token tk, string error) {
     strArea area = getAppropriateStringArea(source, tk);
     size_t tokenOffset = tk.start-area.start;
 
@@ -89,5 +97,7 @@ string getErrorText(string source, Token tk, string error) {
     string cursor = "^".offsetBy(prefix.length+tokenOffset);
     string err = tk.pos.text.offsetBy(prefix.length+tokenOffset) ~ ": " ~ error;
 
-    return prefix ~ source[area.start..area.end] ~ (!area.endCovered ? "..." : "") ~ "\n" ~ cursor ~ "\n" ~ err;
+    string sep = "=".repeat(64);
+
+    return sep ~ "\n" ~ prefix ~ source[area.start..area.end] ~ (!area.endCovered ? "..." : "") ~ "\n" ~ cursor ~ "\n" ~ err;
 }
