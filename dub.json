@@ -5,9 +5,17 @@
 		"Clipsey"
 	],
 	"copyright": "Copyright © 2019, Clipsey",
-	"name": "copperlang",
+	"name": "copper",
 	"versions": ["DEBUG", "LLVM_Load"],
+	"subPackages": [
+		"./core",
+		"./lexer",
+		"./parser"
+	],
 	"dependencies": {
-		"llvm-d": "~>2.4.1"
+		"llvm-d": "~>2.4.1",
+		"copper:cucore": "*",
+		"copper:culexer": "*",
+		"copper:cuparser": "*"
 	}
 }

@@ -1,0 +1,5 @@
+name "compiler"
+description "Compilation definitions and other useful things"
+authors "Clipsey"
+copyright "Copyright © 2019, Clipsey"
+license "BSL-1.0"

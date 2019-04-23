@@ -19,3 +19,4 @@ dub.selections.json
 ./copperlang
 ./copperlang-test-library
 copperlang
+*.a

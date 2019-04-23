@@ -1,0 +1,8 @@
+name "cuparser"
+description "Parser for Copper"
+authors "Clipsey"
+copyright "Copyright © 2019, Clipsey"
+license "BSL-1.0"
+
+dependency "copper:cucore" version="*"
+dependency "copper:culexer" version="*"
