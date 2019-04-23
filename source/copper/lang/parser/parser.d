@@ -295,7 +295,7 @@ private:
             return comment();
         }
 
-        if (isType(tk) || match(tk, [tkGlobal, tkLocal, tkFunction, tkStruct, tkClass, tkThis, tkMeta])) {
+        if (isType(tk) || match(tk, [tkExternalDeclaration, tkGlobal, tkLocal, tkFunction, tkStruct, tkClass, tkThis, tkMeta])) {
             return preDecl(isTopLevel, isStruct);
         }
 
@@ -519,7 +519,22 @@ private:
         Token tk;
         getToken(&tk);
         if (match(tk, [tkGlobal, tkLocal])) {
+            Node* xdecl = decl(isTopLevel, isStruct);
 
+            Token tk2;
+            peekNext(&tk2);
+
+            // exdecl, but for access-attribute versions
+            if (match(tk2, [tkExternalDeclaration])) {
+                xdecl.addStart(new Node(tk2, astAttribute));
+                getToken(&tk2);
+            }
+            xdecl.addStart(new Node(tk, astAttribute));
+            return xdecl;
+        }
+
+        // exdecl, but for non-access attribute versions
+        if (match(tk, [tkExternalDeclaration])) {
             Node* xdecl = decl(isTopLevel, isStruct);
             xdecl.addStart(new Node(tk, astAttribute));
             return xdecl;

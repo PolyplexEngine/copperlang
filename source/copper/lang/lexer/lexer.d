@@ -66,6 +66,7 @@ shared static this()
     keywords["private"] = tkLocal;
     keywords["global"] = tkGlobal;
     keywords["public"] = tkGlobal;
+    keywords["exdecl"] = tkExternalDeclaration;
 }
 
 alias TokenizerErrorHandler = void delegate(string, Token, string);

@@ -315,6 +315,9 @@ enum TokenId tkAs = 215;
 /// unit
 enum TokenId tkUnitTest = 216;
 
+/// exdecl
+enum TokenId tkExternalDeclaration = 216;
+
 /*
     Debugging
 */
