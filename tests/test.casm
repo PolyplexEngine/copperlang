@@ -1,5 +1,0 @@
-factorial:
-    frme
-    push 18446744073709551615
-    frme
-    ret 8
