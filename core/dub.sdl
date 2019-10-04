@@ -1,0 +1,5 @@
+name "cucore"
+description "Core of Copper"
+authors "Clipsey"
+copyright "Copyright © 2019, Clipsey"
+license "BSL-1.0"

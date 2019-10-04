@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/jit
+jit.so
+jit.dylib
+jit.dll
+jit.a
+jit.lib
+jit-test-*
+*.exe
+*.o
+*.obj
+*.lst
