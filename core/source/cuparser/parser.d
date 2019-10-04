@@ -1006,6 +1006,7 @@ private:
 
             // Apply changes.
             expr = texpr;
+            expr.id = astExpression;
 
             getToken(&op);
         }
@@ -1029,6 +1030,7 @@ private:
 
             // Apply changes.
             expr = texpr;
+            expr.id = astExpression;
 
             getToken(&op);
         }

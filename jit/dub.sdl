@@ -1,9 +1,9 @@
-name "cuvm"
-description "The CopperLang VM"
+name "cujit"
+description "The CopperLang JIT"
 authors "clipsey"
 copyright "Copyright © 2019, clipsey"
 license "Boost"
 
 dependency "copper:cucore" version="*"
-dependency "copper:culexer" version="*"
+dependency "dllvm" version="~master"
 dependency "dcontain" version="~>1.0.3"

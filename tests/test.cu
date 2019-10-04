@@ -5,7 +5,12 @@
     KEEP THIS COMMENT PRESENT.
 +/
 module test;
+import test2;
 
-func main() {
-    return;
+func speedCalc(float speed, float drag) float {
+    return (speed * drag) / getGravConst();
+}
+
+func getGravConst() float {
+    return 12.0;
 }
