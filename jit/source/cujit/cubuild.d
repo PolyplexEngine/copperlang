@@ -527,6 +527,39 @@ public:
             return t;
         }
     }
+
+    /**
+        Finds a declaration (of any type)
+    */
+    CuDecl findDeclaration(string name) {
+         // Iterate through all modules
+        foreach(mod; modules) {
+
+            // Look at each declaration in said modules and check the type
+            foreach(CuDecl decl; mod.declarations) {
+                if (decl.name == name) {
+                    return decl;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+        Tries to find a function as closely matching as possible
+    */
+    CuFunction findFunction(string name, CuType[] argTypes) {
+         // Iterate through all modules
+        foreach(mod; modules) {
+            foreach (CuDecl decl; mod.declarations) {
+
+                // Skip non-functions
+                if (decl.type.typeKind != CuTypeKind.function_) continue;
+
+
+            }
+        }
+    }
 }
 
 /**
@@ -541,6 +574,10 @@ private:
 package(cujit):
     Module llvmMod;
     CuDecl[string] declarations;
+
+    void addDeclaration(string name, CuDecl declaration) {
+        declarations[name] = declaration;
+    }
 
 public:
 
@@ -702,6 +739,10 @@ public:
     CuSection finalize() {
         if (llvmFunc !is null) throw new Exception(this.mangledName~" is already finalized!");
         llvmFunc = new Function(this.parentModule.llvmMod, cast(FuncType)this.funcType.llvmType, mangledName());
+
+        // The function is finalized, add it to the module's declarations list
+        this.parentModule.addDeclaration(mangledName, this);
+
         return getSection("entry");
     }
 
@@ -753,6 +794,9 @@ public:
         // Set up the struct and make so that the type points back to the declaration
         this.type = createStruct(name, memberTypes, false);
         this.structType.declaration = this;
+
+        // Add the struct to the module's declarations list
+        this.parentModule.addDeclaration(name, this);
     }
 
     /**
