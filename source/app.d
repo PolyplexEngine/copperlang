@@ -13,5 +13,5 @@ void main(string[] args)
 	engine.compileScriptFile(args[1]);
 	engine.printAllIR();
 
-	writeln(engine.call!(int)(args[2], 5));
+	//writeln(engine.call!(int)(args[2], 5));
 }

@@ -197,6 +197,47 @@ public:
 }
 
 /**
+    A dynamic array
+*/
+class CuDynamicArrayType : CuType {
+private:
+    this() { }
+
+public:
+    /**
+        The array pointer to element 0 type
+    */
+    CuPointerType pointer;
+    
+    /**
+        The array length type (size_t)
+    */
+    CuType length;
+
+    this(CuType elementType) {
+        this.typeKind = CuTypeKind.dynamic_array;
+        this.typeName = cast(string)CuTypeKind.dynamic_array;
+        this.pointer = createPointer(elementType);
+        this.length = createSizeT();
+        this.llvmType = Context.Global.CreateStruct([length.llvmType, pointer.llvmType], false);
+    }
+}
+
+/**
+    A string
+*/
+class CuStringType : CuDynamicArrayType {
+public:
+    this() {
+        this.typeKind = CuTypeKind.string_;
+        this.typeName = cast(string)CuTypeKind.string_;
+        this.pointer = createPointer(createChar());
+        this.length = createSizeT();
+        this.llvmType = Context.Global.CreateStruct([length.llvmType, pointer.llvmType], false);
+    }
+}
+
+/**
     A copper function type
 */
 class CuFuncType : CuType {
@@ -219,7 +260,7 @@ public:
         this.typeName = cast(string)CuTypeKind.function_;
         this.returnType = returnType;
         this.argumentTypes = argumentTypes;
-        this.llvmType = Context.CreateFunction(returnType, argumentTypes.extractTypes, false);
+        this.llvmType = Context.Global.CreateFunction(returnType.llvmType, argumentTypes.extractTypes, false);
     }
 }
 
@@ -235,6 +276,27 @@ class CuStructType : CuType {
 */
 class CuClassType : CuType {
 
+}
+
+/**
+    Creates a basic type from a type name
+*/
+CuType createTypeFromName(CuState state, string type) {
+    switch (type) {
+        case "ubyte":   return createUByte();
+        case "ushort":  return createUShort();
+        case "uint":    return createUInt();
+        case "ulong":   return createULong();
+        case "size_t":  return createSizeT();
+        case "byte":    return createByte();
+        case "short":   return createShort();
+        case "int":     return createInt();
+        case "long":    return createLong();
+        case "float":   return createFloat();
+        case "double":  return createDouble();
+        case "string":  return createString();
+        default: return state.findType(type);
+    }
 }
 
 /**
@@ -301,6 +363,14 @@ CuType createLong() {
 }
 
 /**
+    Creates a size_t type
+*/
+CuType createSizeT() {
+    version(D_LP64) return new CuType(CuTypeKind.size_t_, Context.Global.CreateInt64);
+    else return new CuType(CuTypeKind.size_t_, Context.Global.CreateInt32);
+}
+
+/**
     Creates a 32 bit floating point type
 */
 CuType createFloat() {
@@ -331,22 +401,22 @@ CuArrayType createStaticArray(CuType elements, size_t length) {
 /**
     Creates a new dynamic array type
 */
-CuArrayType createDynamicArray(CuType elements) {
-    return new CuPointerType(elements, CuTypeKind.dynamic_array);
+CuDynamicArrayType createDynamicArray(CuType elements) {
+    return new CuDynamicArrayType(elements);
 }
 
 /**
-    Creates a new string type (array of UTF-16 chars)
+    Creates a new string type (dynamic array of UTF-8 chars)
 */
-CuArrayType createString() {
-    return new CuPointerType(createChar(), CuTypeKind.string_);
+CuStringType createString() {
+    return new CuStringType();
 }
 
 /**
-    Creates a new char type (UTF-16)
+    Creates a new char type (UTF-8)
 */
 CuType createChar() {
-    return new CuType(CuTypeKind.char_, Context.Global.CreateInt32);
+    return new CuType(CuTypeKind.char_, Context.Global.CreateByte);
 }
 
 /**
@@ -373,6 +443,7 @@ public:
         Finds an LLVM type by name
     */
     CuType findType(string type) {
+        import std.conv : to;
 
         // Handle arrays
         if (type.isDynamicArray) {
@@ -386,7 +457,7 @@ public:
             return new CuArrayType(findType(type[0..$-(arrayLenStr.length+2)]), arrayLenStr.to!uint);
         } else {
             // First attempt to find it as a basic type
-            Type t = stringToBasicType(Context.Global, type);
+            CuType t = createTypeFromName(this, type);
             if (t is null) {
 
                 // Iterate through all modules
