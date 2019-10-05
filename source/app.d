@@ -10,9 +10,8 @@ void main(string[] args)
 {
 	initJIT();
 	JITEngine engine = new JITEngine();
-	engine.compileScriptFile("tests/test.cu");
+	engine.compileScriptFile(args[1]);
+	engine.printAllIR();
 
-	alias factorialPtr = int function(float, float);
-	factorialPtr speedCalc = engine.getFunction!factorialPtr("speedCalc(float, float)");
-	writeln(speedCalc(10f, 0.6f));
+	writeln(engine.call!(int)(args[2], 5));
 }

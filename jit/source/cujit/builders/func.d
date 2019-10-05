@@ -5,277 +5,358 @@ import std.conv;
 import dllvm;
 import std.stdio;
 
-void buildFunctionBody(CuBuilder cbld, Node* ast, CuFunction* func) {
-    Builder builder = new Builder(Context.Global);
-    builder.PositionAtStart(func.getSection("entry"));
-
-    Function llvmF = func.llvmFunc();
-
-    Node* statements = ast.firstChild;
-    do {
-
-        switch(statements.id) {
-            case astReturn:
-                buildReturn(builder, statements, func);
-
-                break;
-            case astDeclaration:
-                Node* nameNode = statements.firstChild;
-                string declname = nameNode.token.lexeme;
-
-                Type variableType = stringToBasicType(Context.Global, statements.token.lexeme);
-
-                func.declareVariable(variableType, declname, builder.BuildAlloca(variableType, declname));
-                
-                Value val = func.findVariableAddr(declname);
-                Type type = func.findVariableType(declname);
-
-                // If we also got assignment, do the assignment
-                if (nameNode.firstChild !is null) {
-                    builder.BuildStore(buildExpr(builder, nameNode.firstChild, func, type), val);
-                }
-                break;
-            case astAssignment:
-                Value val = func.findVariableAddr(statements.token.lexeme);
-                Type type = func.findVariableType(statements.token.lexeme);
-                builder.BuildStore(buildExpr(builder, statements.firstChild, func, type), val);
-                break;
-            default: throw new Exception("Not implemented");
-        }
-
-        statements = statements.right;
-    } while(statements !is null);
-
-}
-
 /**
-    Builds a return statement
+    A function build context
 */
-void buildReturn(Builder builder, Node* ast, CuFunction* func) {
+struct CuFuncBuildContext {
+private:
+    CuModule parentModule;
+    CuDecl parent;
+    CuFunction self;
     
-    // Void return if we have no return expression
-    if (ast.firstChild is null) {
-        builder.BuildRetVoid();
+    Node* ast;
+
+public:
+    /**
+        Constructs a new building context
+    */
+    this(CuModule mod, CuFunction self, CuDecl parent = null) {
+        this.parentModule = mod;
+        this.parent = parent;
+        this.self = self;
     }
 
-    // Return with expression
-    builder.BuildRet(buildExpr(builder, ast.firstChild, func));
-}
-
-Value buildExpr(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    switch(ast.token.id) {
-        case tkAdd:
-            return buildAdd(builder, ast, func, constType);
-
-        case tkSub:
-            return buildSub(builder, ast, func, constType);
-
-        case tkMul:
-            return buildMul(builder, ast, func, constType);
-
-        case tkDiv:
-            return buildDiv(builder, ast, func, constType);
-
-        case tkMod:
-            return buildDiv(builder, ast, func, constType);
-
-        default:
-            // Constant expression
-            if (isConst(ast)) {
-                return buildConst(builder, ast, func, constType);
-            }
-
-            // Function call expression
-            if (ast.id == astFunctionCall) {
-                return buildFuncCallExpr(builder, ast, func);
-            }
-            throw new Exception("Invalid token or unimplemented!");
+    /**
+        Builds this function, result is automatically available inside the parent module
+    
+        Returns true if the build succeeded with no problems
+    */
+    bool build(Node* astNode) {
+        try {
+            this.ast = astNode;
+        } catch (Exception ex) {
+            // TODO: better error messages
+            writefln("An error occured during compilation\nMessage: %s", ex.msg);
+            return false;
+        }
+        return true;
     }
 }
 
-/**
-    Build add instruction
-*/
-Value buildAdd(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Node* valANode = ast.firstChild;
-    Node* valBNode = ast.lastChild;
-    Value valA;
-    Value valB;
+// void buildFunctionBody(CuBuilder cbld, Node* ast, CuFunction* func) {
+//     Builder builder = new Builder(Context.Global);
+//     builder.PositionAtStart(func.getSection("entry"));
 
-    // lhs expr
-    if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-        valA = buildExpr(builder, valANode, func);
-    } else {
-        if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-        else valA = func.findValue(valANode.token.lexeme, builder);
-    }
+//     Function llvmF = func.llvmFunc();
 
-    // rhs expr
-    if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-        valB = buildExpr(builder, valBNode, func);
-    } else {
-        if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-        else valB = func.findValue(valBNode.token.lexeme, builder);
-    }
+//     Node* statements = ast.firstChild;
 
-    // add
-    return builder.BuildAdd(valA, valB);
-}
+//     // Go through the body and compile all the statements
+//     if (statements !is null) {
+//         do {
+//             switch(statements.id) {
+//                 case astReturn:
+//                     buildReturn(builder, statements, func);
+//                     break;
 
-/**
-    Build add instruction
-*/
-Value buildSub(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Node* valANode = ast.firstChild;
-    Node* valBNode = ast.lastChild;
-    Value valA;
-    Value valB;
+//                 case astFunctionCall:
+//                     buildFuncCallExpr(builder, statements, func);
+//                     break;
 
-    // lhs expr
-    if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-        valA = buildExpr(builder, valANode, func);
-    } else {
-        if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-        else valA = func.findValue(valANode.token.lexeme, builder);
-    }
+//                 case astDeclaration:
+//                     Node* nameNode = statements.firstChild;
+//                     string declname = nameNode.token.lexeme;
 
-    // rhs expr
-    if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-        valB = buildExpr(builder, valBNode, func);
-    } else {
-        if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-        else valB = func.findValue(valBNode.token.lexeme, builder);
-    }
+//                     Type variableType = stringToBasicType(Context.Global, statements.token.lexeme);
 
-    // add
-    return builder.BuildSub(valA, valB);
-}
+//                     func.declareVariable(variableType, declname, builder.BuildAlloca(variableType, declname));
+                    
+//                     Value val = func.findVariableAddr(declname);
+//                     Type type = func.findVariableType(declname);
 
-/**
-    Build add instruction
-*/
-Value buildMul(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Node* valANode = ast.firstChild;
-    Node* valBNode = ast.lastChild;
-    Value valA;
-    Value valB;
+//                     // If we also got assignment, do the assignment
+//                     if (nameNode.firstChild !is null) {
+//                         builder.BuildStore(buildExpr(builder, nameNode.firstChild, func, type), val);
+//                     }
+//                     break;
+//                 case astAssignment:
+//                     Value val = func.findVariableAddr(statements.token.lexeme);
+//                     Type type = func.findVariableType(statements.token.lexeme);
+//                     builder.BuildStore(buildExpr(builder, statements.firstChild, func, type), val);
+//                     break;
+//                 default: throw new Exception("Not implemented");
+//             }
 
-    // lhs expr
-    if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-        valA = buildExpr(builder, valANode, func);
-    } else {
-        if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-        else valA = func.findValue(valANode.token.lexeme, builder);
-    }
+//             statements = statements.right;
+//         } while(statements !is null);
+//     }
 
-    // rhs expr
-    if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-        valB = buildExpr(builder, valBNode, func);
-    } else {
-        if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-        else valB = func.findValue(valBNode.token.lexeme, builder);
-    }
+//     // Automatically append a return void statement for void functions
+//     if (func.llvmType.ReturnType.Kind == TypeKind.Void) {
+//         builder.BuildRetVoid();   
+//     }
+// }
 
-    // add
-    return builder.BuildMul(valA, valB);
-}
+// /**
+//     Builds a return statement
+// */
+// void buildReturn(Builder builder, Node* ast, CuFunction* func) {
+    
+//     // Void return if we have no return expression
+//     if (ast.firstChild is null) {
+//         builder.BuildRetVoid();
+//     }
 
-/**
-    Build add instruction
-*/
-Value buildDiv(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Node* valANode = ast.firstChild;
-    Node* valBNode = ast.lastChild;
-    Value valA;
-    Value valB;
+//     // Return with expression
+//     builder.BuildRet(buildExpr(builder, ast.firstChild, func));
+// }
 
-    // lhs expr
-    if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-        valA = buildExpr(builder, valANode, func);
-    } else {
-        if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-        else valA = func.findValue(valANode.token.lexeme, builder);
-    }
+// Value buildExpr(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     switch(ast.token.id) {
+//         case tkAdd:
+//             return buildAdd(builder, ast, func, constType);
 
-    // rhs expr
-    if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-        valB = buildExpr(builder, valBNode, func);
-    } else {
-        if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-        else valB = func.findValue(valBNode.token.lexeme, builder);
-    }
+//         case tkSub:
+//             return buildSub(builder, ast, func, constType);
 
-    // add
-    return builder.BuildSDiv(valA, valB);
-}
+//         case tkMul:
+//             return buildMul(builder, ast, func, constType);
 
-/**
-    Build add instruction
-*/
-Value buildMod(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Node* valANode = ast.firstChild;
-    Node* valBNode = ast.lastChild;
-    Value valA;
-    Value valB;
+//         case tkDiv:
+//             return buildDiv(builder, ast, func, constType);
 
-    // lhs expr
-    if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-        valA = buildExpr(builder, valANode, func);
-    } else {
-        if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-        else valA = func.findValue(valANode.token.lexeme, builder);
-    }
+//         case tkMod:
+//             return buildDiv(builder, ast, func, constType);
 
-    // rhs expr
-    if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-        valB = buildExpr(builder, valBNode, func);
-    } else {
-        if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-        else valB = func.findValue(valBNode.token.lexeme, builder);
-    }
+//         case tkIdentifier:
 
-    // add
-    return builder.BuildSRem(valA, valB);
-}
+//             // Function call expression
+//             if (ast.id == astFunctionCall) {
+//                 return buildFuncCallExpr(builder, ast, func);
+//             }
 
-Value buildFuncCallExpr(Builder builder, Node* ast, CuFunction* func) {
-    string funcToCall = ast.token.lexeme;
+//             return func.findValue(ast.token.lexeme, builder);
 
-    Value[] paramOut;
+//         default:
+//             // Constant expression
+//             if (isConst(ast)) {
+//                 return buildConst(builder, ast, func, constType);
+//             }
+//             throw new Exception("Invalid token or unimplemented!");
+//     }
+// }
 
-    Node* params = ast.firstChild;
-    if (params.firstChild !is null) {
-        uint i = 0;
-        params = params.firstChild;
-        do {
-            paramOut ~= buildExpr(builder, params, func);
-            i++;
-            params = params.right;
-        } while (params !is null);
-    }
+// /**
+//     Build add instruction
+// */
+// Value buildAdd(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Node* valANode = ast.firstChild;
+//     Node* valBNode = ast.lastChild;
+//     Value valA;
+//     Value valB;
 
-    Function otherFunc = func.findFunction(funcToCall, paramOut);
-    return builder.BuildCall(otherFunc, paramOut);
-}
+//     // lhs expr
+//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valA = buildExpr(builder, valANode, func);
+//     } else {
+//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
+//         else valA = func.findValue(valANode.token.lexeme, builder);
+//     }
 
-/**
-    Returns true if the node leaf is a constant value
-*/
-bool isConst(Node* ast) {
-    return (ast.token.id == tkIntLiteral || ast.token.id == tkNumberLiteral);
-}
+//     // rhs expr
+//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valB = buildExpr(builder, valBNode, func);
+//     } else {
+//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
+//         else valB = func.findValue(valBNode.token.lexeme, builder);
+//     }
 
-Value buildConst(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-    Context ctx = Context.Global;
+//     // add
+//     switch(valA.TypeOf.Kind) {
+//         case TypeKind.Int:
+//             return builder.BuildAdd(valA, valB);
+//         case TypeKind.Float32, TypeKind.Float64:
+//             return builder.BuildFAdd(valA, valB);
+//         default: throw new Exception("Invalid operation");
+//     }
+// }
 
-    switch(ast.token.id) {
-        case tkIntLiteral:
-            return new ConstInt(constType !is null ? constType : ctx.CreateInt64(), ast.token.lexeme, 10);
-        case tkNumberLiteral:
-            return new ConstReal(constType !is null ? constType : ctx.CreateFloat32(), ast.token.lexeme);
-        case tkNullLiteral:
-            return new Null(constType !is null ? constType : ctx.CreateInt32());
+// /**
+//     Build add instruction
+// */
+// Value buildSub(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Node* valANode = ast.firstChild;
+//     Node* valBNode = ast.lastChild;
+//     Value valA;
+//     Value valB;
 
-        default: throw new Exception("Not a constant value!");
-    }
-}
+//     // lhs expr
+//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valA = buildExpr(builder, valANode, func);
+//     } else {
+//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
+//         else valA = func.findValue(valANode.token.lexeme, builder);
+//     }
+
+//     // rhs expr
+//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valB = buildExpr(builder, valBNode, func);
+//     } else {
+//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
+//         else valB = func.findValue(valBNode.token.lexeme, builder);
+//     }
+
+//     // add
+//     switch(valA.TypeOf.Kind) {
+//         case TypeKind.Int:
+//             return builder.BuildSub(valA, valB);
+//         case TypeKind.Float32, TypeKind.Float64:
+//             return builder.BuildFSub(valA, valB);
+//         default: throw new Exception("Invalid operation");
+//     }
+// }
+
+// /**
+//     Build add instruction
+// */
+// Value buildMul(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Node* valANode = ast.firstChild;
+//     Node* valBNode = ast.lastChild;
+//     Value valA;
+//     Value valB;
+
+//     // lhs expr
+//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valA = buildExpr(builder, valANode, func);
+//     } else {
+//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
+//         else valA = func.findValue(valANode.token.lexeme, builder);
+//     }
+
+//     // rhs expr
+//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valB = buildExpr(builder, valBNode, func);
+//     } else {
+//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
+//         else valB = func.findValue(valBNode.token.lexeme, builder);
+//     }
+
+//     // add
+//     switch(valA.TypeOf.Kind) {
+//         case TypeKind.Int:
+//             return builder.BuildMul(valA, valB);
+//         case TypeKind.Float32, TypeKind.Float64:
+//             return builder.BuildFMul(valA, valB);
+//         default: throw new Exception("Invalid operation");
+//     }
+// }
+
+// /**
+//     Build add instruction
+// */
+// Value buildDiv(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Node* valANode = ast.firstChild;
+//     Node* valBNode = ast.lastChild;
+//     Value valA;
+//     Value valB;
+
+//     // lhs expr
+//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valA = buildExpr(builder, valANode, func);
+//     } else {
+//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
+//         else valA = func.findValue(valANode.token.lexeme, builder);
+//     }
+
+//     // rhs expr
+//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valB = buildExpr(builder, valBNode, func);
+//     } else {
+//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
+//         else valB = func.findValue(valBNode.token.lexeme, builder);
+//     }
+
+//     // add
+//     switch(valA.TypeOf.Kind) {
+//         case TypeKind.Int:
+//             return builder.BuildSDiv(valA, valB);
+//         case TypeKind.Float32, TypeKind.Float64:
+//             return builder.BuildFDiv(valA, valB);
+//         default: throw new Exception("Invalid operation");
+//     }
+// }
+
+// /**
+//     Build add instruction
+// */
+// Value buildMod(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Node* valANode = ast.firstChild;
+//     Node* valBNode = ast.lastChild;
+//     Value valA;
+//     Value valB;
+
+//     // lhs expr
+//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valA = buildExpr(builder, valANode, func);
+//     } else {
+//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
+//         else valA = func.findValue(valANode.token.lexeme, builder);
+//     }
+
+//     // rhs expr
+//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
+//         valB = buildExpr(builder, valBNode, func);
+//     } else {
+//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
+//         else valB = func.findValue(valBNode.token.lexeme, builder);
+//     }
+
+//     // add
+//     switch(valA.TypeOf.Kind) {
+//         case TypeKind.Int:
+//             return builder.BuildSRem(valA, valB);
+//         default: throw new Exception("Can't get the remainder of a float value");
+//     }
+// }
+
+// Value buildFuncCallExpr(Builder builder, Node* ast, CuFunction* func) {
+//     string funcToCall = ast.token.lexeme;
+
+//     Value[] paramOut;
+
+//     Node* params = ast.firstChild;
+//     if (params.firstChild !is null) {
+//         uint i = 0;
+//         params = params.firstChild;
+//         do {
+//             paramOut ~= buildExpr(builder, params, func);
+//             i++;
+//             params = params.right;
+//         } while (params !is null);
+//     }
+
+//     Function otherFunc = func.findFunction(funcToCall, paramOut);
+//     return builder.BuildCall(otherFunc, paramOut);
+// }
+
+// /**
+//     Returns true if the node leaf is a constant value
+// */
+// bool isConst(Node* ast) {
+//     return (ast.token.id == tkIntLiteral || ast.token.id == tkNumberLiteral);
+// }
+
+// Value buildConst(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
+//     Context ctx = Context.Global;
+
+//     switch(ast.token.id) {
+//         case tkIntLiteral:
+//             return new ConstInt(constType !is null ? constType : ctx.CreateInt64(), ast.token.lexeme, 10);
+//         case tkNumberLiteral:
+//             return new ConstReal(constType !is null ? constType : ctx.CreateFloat32(), ast.token.lexeme.to!float);
+//         case tkNullLiteral:
+//             return new Null(constType !is null ? constType : ctx.CreateInt32());
+
+//         default: throw new Exception("Not a constant value!");
+//     }
+// }

@@ -7,10 +7,16 @@
 module test;
 import test2;
 
-func speedCalc(float speed, float drag) float {
-    return (speed * drag) / getGravConst();
+func main(int a) int {
+
+    doSomeSideEffect();
+    return doSomeCalculation(a);
 }
 
-func getGravConst() float {
-    return 12.0;
+func doSomeCalculation(int c) int {
+    return c;
+}
+
+func doSomeSideEffect() {
+
 }

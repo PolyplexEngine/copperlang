@@ -2,6 +2,7 @@ module cujit.engine;
 import cujit.builder;
 import cujit.cubuild;
 import dllvm;
+import std.stdio;
 
 /**
     The JIT engine
@@ -12,7 +13,7 @@ package(cujit):
     IModuleProvider provider;
     CuBuilder builder;
 
-    CuModule*[] modules;
+    CuModule[] modules;
 
 public:
     /**
@@ -34,24 +35,61 @@ public:
     void compileScriptFile(string moduleFile) {
         import std.file : readText;
         import std.stdio : writeln;
-        CuModule* mod = builder.build(readText(moduleFile));
+        CuModule mod = builder.build(readText(moduleFile));
         modules ~= mod;
-        engine.AddModule(mod.llvmModule);
-        writeln("Compiled IR\n", mod.llvmIR());
+        engine.AddModule(mod.llvmMod);
+        //writeln("Compiled IR\n", mod.llvmIR());
     }
 
+    /**
+        Prints the IR of all the current bound modules
+    */
+    void printAllIR() {
+        foreach(module_; modules) {
+            writeln(module_.getIR);
+        }
+    }
+
+    /**
+        Compiles a copper script
+    */
     void compileScript(string script) {
         builder.build(script);
     }
 
-    T getFunction(T)(string name) {
-        return engine.GetFunctionAddr!T(name);
+    /**
+        Gets a function by its function prototype
+    */
+    T getFunctionByProto(T)(string name) {
+        auto fnc = engine.GetFunctionAddr!T(name);
+        if (fnc is null) throw new Exception("Could not find function "~name);
+        return fnc;
     }
 
+    /**
+        Gets a function by return type and argument types
+    */
+    auto getFunction(retType = void, args...)(string proto) {
+        alias retT = retType function(args);
+        return getFunctionByProto!retT(proto);
+    }
+
+    /**
+        Calls a function with the specified prototype with the specified arguments
+    */
+    retType call(retType = void, Args...)(string proto, Args args) {
+        auto fnc = (getFunction!(retType, Args)(proto));
+        return fnc(args);
+    }
+
+
+
+    /**
+        Recompiles all modules
+        This will make any existing function pointer invalid!
+    */
     void recompile() {
-        foreach(mod; modules) {
-            engine.Recompile(mod.llvmModule);
-        }
+        engine.RecompileAll();
     }
 }
 

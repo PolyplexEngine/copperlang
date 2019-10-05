@@ -9,7 +9,7 @@ import std.format;
     An exception for when visibility rules are broken
 */
 class VisibilityException : Exception {
-    this(string type, string name, CuModule* origin, string fetcher) {
+    this(string type, string name, CuModule origin, string fetcher) {
         super("%s %s (from %s) is not accessible from %s".format(type, name, origin.name, fetcher));
     }
 }
@@ -26,416 +26,489 @@ enum Visibility {
 }
 
 /**
-    A copper module
+    The kind of type
 */
-struct CuModule {
-private:
-    Node* node;
-    Module module_;
-    string moduleName;
-    string[] refs;
+enum CuTypeKind : string {
 
-    CuFunction*[] globalFuncs;
+    /// Boolean - Int8
+    bool_ = "bool",
 
-public:
-    /**
-        Constructs a new module
-    */
-    this(string moduleName, Node* node, Context ctx) {
-        module_ = new Module(moduleName, ctx);
-        this.moduleName = moduleName;
-        this.node = node;
-    }
+    /// Unsigned byte - Int8
+    ubyte_ = "ubyte",
 
-    /**
-        Gets a list of the modules imported by this module
-    */
-    @property
-    string[] imports() {
-        return refs;
-    }
+    /// Unsigned short - Int16
+    ushort_ = "ushort",
 
-    /**
-        Gets the name of this module
-    */
-    @property
-    string name() {
-        return moduleName;
-    }
+    /// Unsigned int - Int32
+    uint_ = "uint",
 
-    /**
-        The list of global functions
-    */
-    @property
-    CuFunction*[] globalFunctions() {
-        return globalFuncs;
-    }
+    /// Unsigned long - Int64
+    ulong_ = "ulong",
 
-    /**
-        Gets the underlying LLVM module
-    */
-    @property
-    ref Module llvmModule() {
-        return module_;
-    }
+    /// Signed byte - Int8
+    byte_ = "byte",
 
-    /**
-        Gets the LLVM IR
-    */
-    @property
-    string llvmIR() {
-        return module_.toString();
-    }
+    /// Signed short - Int16
+    short_ = "short",
 
-    /**
-        Adds an import to the import list
-    */
-    void addImport(string name) {
-        refs ~= name;
-    }
+    /// Signed int - Int32
+    int_ = "int",
+
+    /// Signed long - Int64
+    long_ = "long",
+
+    /// Float - Float32
+    float_ = "float",
+
+    /// Double - Float64
+    double_ = "double",
+
+    /// Char - Int32
+    char_ = "char",
+
+    /// String - Int32[]
+    string_ = "string",
+
+    /// Ptr - VoidPtr
+    ptr_ = "ptr",
+
+    /// Void type
+    void_ = "void",
+
+    /// T[(size)] - Array
+    static_array = "static_array",
+
+    /// T[] - VoidPtr + size_t
+    dynamic_array = "dynamic_array",
+
+    /// function
+    function_ = "func",
+
+    /// class
+    class_ = "class",
+
+    /// struct
+    struct_ = "struct",
 
     /**
-        Add a new function to the module and return it
+        32 bit: Int32
+        64 bit: Int64
     */
-    CuFunction* addFunction(Node* discoveredNode, Visibility visibility, FuncKind kind, string name, bool extension = false) {
-        CuFunction* newFunc = new CuFunction(&this, discoveredNode, visibility, kind, name, extension);
-        globalFuncs ~= newFunc;
-        return newFunc;
-    }
+    size_t_ = "size_t"
 }
 
 /**
-    A copper definition
+    Extracts the low level LLVM types from the high level copper types
 */
-struct CuVarDef {
-    /**
-        Constructs a named variable definition
-    */
-    this(string name, string typeName, Type llvmType) {
-        this.name = name;
-        this.typeName = typeName;
-        this.llvmType = llvmType;
-        this.index = 0;
+Type[] extractTypes(CuType[] types) {
+    Type[] otypes;
+    foreach(type; types) {
+        otypes ~= type.llvmType;
+    }
+    return otypes;
+}
+
+/**
+    A copper type
+
+    This is a high level wrapper over LLVM's type system
+*/
+class CuType {
+private:
+
+    this() { }
+
+    this(CuTypeKind kind, Type type) {
+        this.typeKind = kind;
+        this.typeName = cast(string)kind;
+        this.llvmType = type;
     }
 
+public:
     /**
-        Constructs an indexed variable definition
+        The kind of type this type is
     */
-    this(uint index, string name, string typeName, Type llvmType) {
-        this.index = index;
-        this.name = name;
-        this.typeName = typeName;
-        this.llvmType = llvmType;
-    }
+    CuTypeKind typeKind;
 
     /**
-        The name of the definition
-    */
-    string name;
-
-    /**
-        The index of the definition (in the case of a parameter)
-    */
-    uint index;
-
-    /**
-        The (copper) name of a type
+        The (human readable) name of the type
     */
     string typeName;
 
     /**
-        The llvm type
+        The underlying LLVM type
     */
     Type llvmType;
+
+    /**
+        The declaration for the type
+
+        Note: this is only relevant if the type is a class or struct
+    */
+    CuDecl typeDecl;
 }
 
 /**
-    The function kind
+    A copper pointer type
 */
-enum FuncKind {
-    /// A function in global scope
-    Global,
+class CuPointerType : CuType {
+public:
+    /**
+        The type of data the pointer points to
+    */
+    CuType elementType;
 
-    /// A function in the scope of a struct
-    Struct,
+    /**
+        Creates a new pointer
+    */
+    this(CuType elementType, CuTypeKind kind = CuTypeKind.ptr_) {
+        this.typeKind = kind;
+        this.typeName = cast(string)kind;
+        this.elementType = elementType;
+        this.llvmType = Context.Global.CreatePointer(elementType.llvmType);
+    }
+}
 
-    /// A function in the scope of a class
-    Class
+/**
+    A copper array type
+*/
+class CuArrayType : CuType {
+public:
+    /**
+        The type of the elements in the array
+    */
+    CuType elementType;
+
+    /**
+        The length of the array
+    */
+    size_t length;
+
+    /**
+        Creates a new pointer
+    */
+    this(CuType elementType, size_t length) {
+        this.typeKind = CuTypeKind.static_array;
+        this.typeName = cast(string)CuTypeKind.static_array;
+        this.elementType = elementType;
+        this.length = length;
+        this.llvmType = Context.Global.CreateArray(elementType.llvmType, cast(uint)length);
+    }
+}
+
+/**
+    A copper function type
+*/
+class CuFuncType : CuType {
+public:
+    /**
+        The return type of the function
+    */
+    CuType returnType;
+
+    /**
+        The types of the arguments of the function
+    */
+    CuType[] argumentTypes;
+
+    /**
+        Creates a new function type
+    */
+    this(CuType returnType, CuType[] argumentTypes) {
+        this.typeKind = CuTypeKind.function_;
+        this.typeName = cast(string)CuTypeKind.function_;
+        this.returnType = returnType;
+        this.argumentTypes = argumentTypes;
+        this.llvmType = Context.CreateFunction(returnType, argumentTypes.extractTypes, false);
+    }
+}
+
+/**
+    A copper struct type
+*/
+class CuStructType : CuType {
+
+}
+
+/**
+    A copper class type
+*/
+class CuClassType : CuType {
+
+}
+
+/**
+    Creates a boolean type
+*/
+CuType createBool() {
+    return new CuType(CuTypeKind.bool_, Context.Global.CreateByte);
+}
+
+/**
+    Creates a ubyte type
+*/
+CuType createUByte() {
+    return new CuType(CuTypeKind.ubyte_, Context.Global.CreateByte);
+}
+
+/**
+    Creates a ushort type
+*/
+CuType createUShort() {
+    return new CuType(CuTypeKind.ushort_, Context.Global.CreateInt16);
+}
+
+/**
+    Creates a uint type
+*/
+CuType createUInt() {
+    return new CuType(CuTypeKind.uint_, Context.Global.CreateInt32);
+}
+
+/**
+    Creates a ulong type
+*/
+CuType createULong() {
+    return new CuType(CuTypeKind.ulong_, Context.Global.CreateInt64);
+}
+
+/**
+    Creates a byte type
+*/
+CuType createByte() {
+    return new CuType(CuTypeKind.byte_, Context.Global.CreateByte);
+}
+
+/**
+    Creates a short type
+*/
+CuType createShort() {
+    return new CuType(CuTypeKind.short_, Context.Global.CreateInt16);
+}
+
+/**
+    Creates a int type
+*/
+CuType createInt() {
+    return new CuType(CuTypeKind.int_, Context.Global.CreateInt32);
+}
+
+/**
+    Creates a long type
+*/
+CuType createLong() {
+    return new CuType(CuTypeKind.long_, Context.Global.CreateInt64);
+}
+
+/**
+    Creates a 32 bit floating point type
+*/
+CuType createFloat() {
+    return new CuType(CuTypeKind.float_, Context.Global.CreateFloat32);
+}
+
+/**
+    Creates a 64 bit floating point type
+*/
+CuType createDouble() {
+    return new CuType(CuTypeKind.double_, Context.Global.CreateFloat64);
+}
+
+/**
+    Creates a pointer pointing to the specified type
+*/
+CuPointerType createPointer(CuType to) {
+    return new CuPointerType(to);
+}
+
+/**
+    Creates a new static array type
+*/
+CuArrayType createStaticArray(CuType elements, size_t length) {
+    return new CuArrayType(elements, length);
+}
+
+/**
+    Creates a new dynamic array type
+*/
+CuArrayType createDynamicArray(CuType elements) {
+    return new CuPointerType(elements, CuTypeKind.dynamic_array);
+}
+
+/**
+    Creates a new string type (array of UTF-16 chars)
+*/
+CuArrayType createString() {
+    return new CuPointerType(createChar(), CuTypeKind.string_);
+}
+
+/**
+    Creates a new char type (UTF-16)
+*/
+CuType createChar() {
+    return new CuType(CuTypeKind.char_, Context.Global.CreateInt32);
+}
+
+/**
+    Creates a new function type
+*/
+CuFuncType createFunc(CuType returnType, CuType[] paramTypes) {
+    return new CuFuncType(returnType, paramTypes);
+}
+
+/**
+    A copper state containing modules and handles indexing across modules
+*/
+class CuState {
+public:
+    CuModule[] modules;
+
+    CuModule addModule(string name, Node* ast) {
+        CuModule mod = new CuModule(name, ast);
+        modules ~= mod;
+        return mod;
+    }
+
+    /**
+        Finds an LLVM type by name
+    */
+    CuType findType(string type) {
+
+        // Handle arrays
+        if (type.isDynamicArray) {
+            return new CuPointerType(findType(type[0..$-2]));
+        } else if (type.isStaticArray) {
+            string arrayLenStr = type.fetchArrayLength();
+
+            // It wasn't an array anyway.
+            if (arrayLenStr is null) return null;
+
+            return new CuArrayType(findType(type[0..$-(arrayLenStr.length+2)]), arrayLenStr.to!uint);
+        } else {
+            // First attempt to find it as a basic type
+            Type t = stringToBasicType(Context.Global, type);
+            if (t is null) {
+
+                // Iterate through all modules
+                foreach(mod; modules) {
+
+                    // Look at each declaration in said modules and check the type
+                    foreach(CuDecl decl; mod.declarations) {
+                        if (decl.type.typeName == type) {
+                            return decl.type;
+                        }
+                    }
+                }
+            }
+
+            return t;
+        }
+    }
+}
+
+/**
+    A LLVM Module
+*/
+class CuModule {
+private:
+    string name_;
+    Node* ast;
+    string[] imports;
+
+package(cujit):
+    Module llvmMod;
+    CuDecl[string] declarations;
+
+public:
+
+    this(string name, Node* ast) {
+        this.llvmMod = new Module(name);
+        this.ast = ast;
+        this.name_ = name;
+    }
+
+    void addImport(string import_) {
+        this.imports ~= import_;
+    }
+
+    string name() {
+        return name_;
+    }
+
+    string getIR() {
+        return llvmMod.toString();
+    }
+}
+
+/**
+    A copper declaration
+*/
+class CuDecl {
+protected:
+    // List of either parameters or members based on if its a function or a struct/class
+    int[string] paramsOrMembers;
+
+public:
+    /**
+        The type of the declaration
+    */
+    CuType type;
+
+    /**
+        The (human readable) name of this declaration
+    */
+    string name;
+
+    /**
+        The visibility of this declaration
+    */
+    Visibility visibility;
 }
 
 /**
     A copper function
 */
-struct CuFunction {
+class CuFunction : CuDecl {
 private:
-    Node* funcNode;
-    Node* funcBodyNode;
-
-    CuModule* parentModule;
-    Visibility visiblityMode;
-    string funcName = "UNCOMPILED";
-    string unmangled = "";
-    bool isExtension;
-
-    FuncType funcType;
-    Function llvmFunction;
-    
-    FuncKind funcKind;
-    // A function can only be a member of a struct or a class therefore we put them in a union
-    union {
-        CuStruct* parentStruct;
-        CuClass* parentClass;
-    }
-
-    uint[string] paramMapping;
-
-    BasicBlock[string] sections;
-
-    struct VarDef {
-        Type type;
-        Value value;
-    }
-
-    VarDef[string] variables;
+    Function llvmFunc;
 
 public:
     /**
-        Construct a Copper function
+        The return type of the function
     */
-    this(CuModule* parentModule, Node* node, Visibility visiblityMode, FuncKind kind, string name, bool extension = false) {
-        this.parentModule = parentModule;
-        this.funcKind = kind;
-        this.isExtension = extension;
-        this.visiblityMode = visiblityMode;
-        this.funcNode = node;
-        this.funcName = name;
-        this.unmangled = name;
-    }
+    CuType returnType;
 
     /**
-        Assign the parent struct instance
+        The types of the parameters
     */
-    void assignParent(CuStruct* struct_) {
-        this.parentStruct = struct_;
-    }
+    CuType[] paramTypes;
 
     /**
-        Assign the parent class instance
+        The parent module of a function
     */
-    void assignParent(CuClass* class_) {
-        this.parentClass = class_;
-    }
-
-    void assignBody(Node* body) {
-        funcBodyNode = body;
-    }
+    CuModule parentModule;
 
     /**
-        Finish this function definition by submitting its LLVM function type and its function object
+        The parent struct or class of a function
     */
-    void finish(FuncType type, Function llvmFunction) {
-        this.funcType = type;
-        this.llvmFunction = llvmFunction;
+    CuDecl parent;
 
-        this.funcName = llvmFunction.Name;
-    }
-
-    /**
-        Gets the AST node of this function
-    */
     @property
-    Node* astNode() {
-        return funcNode;
-    }
+    string mangledName() {
+        string[] tNames;
+        foreach(param; paramTypes) {
 
-    /**
-        Gets the AST node of this function
-    */
-    @property
-    Node* bodyAstNode() {
-        return funcBodyNode;
-    }
-
-    /**
-        Gets the name of this function
-    */
-    @property
-    string name() {
-        return funcName;
-    }
-
-    /**
-        The LLVM function instance
-    */
-    @property
-    Function llvmFunc() {
-        return llvmFunction;
-    }
-
-    /**
-        The LLVM function type
-    */
-    @property
-    FuncType llvmType() {
-        return funcType;
-    }
-
-    /**
-        The LLVM module
-    */
-    @property
-    Module llvmModule() {
-        return parentModule.llvmModule;
-    }
-
-    /**
-        Gets the function kind
-    */
-    @property
-    FuncKind kind() {
-        return funcKind;
-    }
-
-    /**
-        Gets the function's visibility
-
-        If in global scope; the visibility affects the access from other modules
-    */
-    @property
-    Visibility visibility() {
-        return visiblityMode;
-    }
-
-    /**
-        Mapping between parameter and LLVM index
-    */
-    @property
-    uint[string] params() {
-        return paramMapping;
-    }
-
-    /**
-        Finds the value with the specified name
-    */
-    Value findValue(string name, Builder builder) {
-        // TODO: non-global non-function values
-        if (name in params) {
-            return llvmFunc.GetParam(params[name]);
         }
 
-        if (name in variables) {
-            return builder.BuildLoad(variables[name].value, name);
-        }
-
-        return null;
+        return "%s%s(%s)".format((parent !is null ? parent.name~"::" : ""), this.name, );
     }
-
-    Function findFunction(string name, Value[] args) {
-        foreach(CuFunction* func; parentModule.globalFunctions) {
-            if (func.unmangled == name && func.params.length == args.length) {
-                return func.llvmFunc;
-            }
-        }
-        return null;
-    }
-
-    /**
-        Returns the mangled name
-    */
-    string mangleFunc(string[] argTypes, Type parent = null, bool isClass = false) {
-        return mangleName(funcName, argTypes, parent, isClass);
-    }
-
-    /**
-        Add parameter to the mapping
-    */
-    void addParam(string name) {
-        paramMapping[name] = cast(uint)paramMapping.length;
-    }
-
-    /**
-        Add a section (basic block) to the function
-    */
-    void addSection(string name, BasicBlock block) {
-        sections[name] = block;
-    }
-
-    /**
-        Declare a variable
-    */
-    void declareVariable(Type type, string name, Value llvmValue) {
-        variables[name] = VarDef(type, llvmValue);
-    }
-
-    /**
-        Finds a variable (specifically)
-    */
-    Value findVariable(string name, Builder builder) {
-
-        if (name in variables) {
-            return builder.BuildLoad(variables[name].value, name);
-        }
-        
-        throw new Exception("No such variable in scope");
-    }
-    
-    Value findVariableAddr(string name) {
-
-        if (name in variables) {
-            return variables[name].value;
-        }
-        
-        throw new Exception("No such variable in scope");
-    }
-
-    Type findVariableType(string name) {
-
-        if (name in variables) {
-            return variables[name].type;
-        }
-        
-        throw new Exception("No such variable in scope");
-    }
-
-    BasicBlock getSection(string name) {
-        return sections[name];
-    }
-
-    /**
-        Enforce visibility rules, throws exception if rules are broken
-    */
-    void enforceVisibility(CuFunction* other) {
-        if (visiblityMode == Visibility.Local) {
-            if (other.parentModule != parentModule)
-                throw new VisibilityException("function", llvmFunction.Name, parentModule, other.parentModule.name);
-
-            // TODO: make declarations from the same module implicit friends?
-
-            switch (kind) {
-                case FuncKind.Class:
-                    // If they are not the same kind they are definately not from the same type.
-                    // Therefore we check that before checking if they are from the same class
-                    if (other.kind != FuncKind.Class || this.parentClass != other.parentClass)
-                        throw new VisibilityException("function", llvmFunction.Name, parentModule, other.name);
-                    break;
-
-                case FuncKind.Struct:
-                    // If they are not the same kind they are definately not from the same type.
-                    // Therefore we check that before checking if they are from the same struct
-                    if (other.kind != FuncKind.Struct || this.parentStruct != other.parentStruct)
-                        throw new VisibilityException("function", llvmFunction.Name, parentModule, other.name);
-                    break;
-
-                default: break;
-            }
-        }
-    }
-}
-
-struct CuStruct {
 
 }
 
-struct CuClass {
+class CuClass : CuDecl {
+
+}
+
+class CuStruct : CuDecl {
 
 }

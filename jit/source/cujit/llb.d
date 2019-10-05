@@ -7,34 +7,34 @@ import dllvm;
 
     returns null if the string did not match any basic types
 */
-Type stringToBasicType(Context ctx, string type) {
-    switch(type) {
-        case "byte", "ubyte", "bool": return ctx.CreateByte();
-        case "short", "ushort": return ctx.CreateInt16();
-        case "int", "uint": return ctx.CreateInt32();
-        case "long", "ulong": return ctx.CreateInt64();
-        case "float": return ctx.CreateFloat32();
-        case "double": return ctx.CreateFloat64();
-        case "void": return ctx.CreateVoid();
-        default: {
+// Type stringToBasicType(State state, string type) {
+//     switch(type) {
+//         case "byte", "ubyte", "bool": return Context.Global.CreateByte();
+//         case "short", "ushort": return Context.Global.CreateInt16();
+//         case "int", "uint": return Context.Global.CreateInt32();
+//         case "long", "ulong": return Context.Global.CreateInt64();
+//         case "float": return Context.Global.CreateFloat32();
+//         case "double": return Context.Global.CreateFloat64();
+//         case "void": return Context.Global.CreateVoid();
+//         default: {
             
-            // Handle arrays
-            if (type.isDynamicArray) {
-                return ctx.CreatePointer(ctx.stringToBasicType(type[0..$-2]));
-            } else if (type.isStaticArray) {
-                string arrayLenStr = type.fetchArrayLength();
+//             // Handle arrays
+//             if (type.isDynamicArray) {
+//                 return Context.Global.CreatePointer(state.findType(type[0..$-2]));
+//             } else if (type.isStaticArray) {
+//                 string arrayLenStr = type.fetchArrayLength();
 
-                // It wasn't an array anyway.
-                if (arrayLenStr is null) return null;
+//                 // It wasn't an array anyway.
+//                 if (arrayLenStr is null) return null;
 
-                return ctx.CreateArray(ctx.stringToBasicType(type[0..$-(arrayLenStr.length+2)]), arrayLenStr.to!uint);
-            }
+//                 return Context.Global.CreateArray(state.findType(type[0..$-(arrayLenStr.length+2)]), arrayLenStr.to!uint);
+//             }
 
-            // Okay, there really was nothing, return null.
-            return null;
-        }
-    }
-}
+//             // Okay, there really was nothing, return null.
+//             return null;
+//         }
+//     }
+// }
 
 /**
     It's a dynamic array if it ends with []
