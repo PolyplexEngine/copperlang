@@ -242,6 +242,12 @@ public:
 */
 class CuFuncType : CuType {
 public:
+
+    /**
+        The parent declaration (if any)
+    */
+    CuFunction declaration;
+
     /**
         The return type of the function
     */
@@ -268,7 +274,46 @@ public:
     A copper struct type
 */
 class CuStructType : CuType {
+public:
 
+    /**
+        The parent declaration (if any)
+    */
+    CuStruct declaration;
+
+    /**
+        The types of the struct's members
+    */
+    CuType[] memberTypes;
+
+    /**
+        Wether the struct's data is packed
+    */
+    bool isPacked;
+
+    /**
+        The specified name
+    */
+    string name;
+
+    /**
+        Creates a new function type
+    */
+    this(string name, CuType[] members, bool isPacked = false) {
+        this.typeKind = CuTypeKind.struct_;
+        this.typeName = cast(string)CuTypeKind.struct_;
+        this.isPacked = isPacked;
+        this.name = name;
+        this.memberTypes = members;
+
+        // Convert data to LLVM suitable data
+        Type[] llvmTypes = new Type[members.length];
+        foreach(i, member; members) {
+            llvmTypes[i] = member.llvmType;
+        }
+
+        this.llvmType = Context.Global.CreateStruct(name, llvmTypes, isPacked);
+    }
 }
 
 /**
@@ -420,6 +465,13 @@ CuType createChar() {
 }
 
 /**
+    Creates a new struct type
+*/
+CuStructType createStruct(string name, CuType[] memberTypes, bool isPacked = false) {
+    return new CuStructType(name, memberTypes, isPacked);
+}
+
+/**
     Creates a new function type
 */
 CuFuncType createFunc(CuType returnType, CuType[] paramTypes) {
@@ -515,15 +567,22 @@ public:
     A copper declaration
 */
 class CuDecl {
-protected:
-    // List of either parameters or members based on if its a function or a struct/class
-    int[string] paramsOrMembers;
-
 public:
+
+    /**
+        The parent module of the declaration
+    */
+    CuModule parentModule;
+
     /**
         The type of the declaration
     */
     CuType type;
+
+    /**
+        The parent struct or class of a declaration
+    */
+    CuDecl parent;
 
     /**
         The (human readable) name of this declaration
@@ -537,49 +596,218 @@ public:
 }
 
 /**
+    A copper code section
+
+    A code section is a small wrapper around LLVM's BasicBlock
+*/
+class CuSection {
+private:
+    this(CuFunction owner, BasicBlock block, string name, CuSection parent = null) {
+        this.owner = owner;
+        this.llvmBlock = block,
+        this.parent = parent;
+        this.name = name;
+    }
+
+public:
+
+    /**
+        The name of the section
+    */
+    string name;
+
+    /**
+        The basic block this section wraps
+    */
+    BasicBlock llvmBlock;
+
+    /**
+        The owner function this is attached to
+    */
+    CuFunction owner;
+
+    /**
+        The parent section (the section that this was created from)
+    */
+    CuSection parent;
+}
+
+/**
     A copper function
 */
 class CuFunction : CuDecl {
 private:
     Function llvmFunc;
+    int[string] idxMapping;
+    string localName;
+    CuSection[string] sectionMapping;
+
+public:
+    this(CuModule module_, CuType returnType, string name, CuDecl[] parameters) {
+
+        this.parentModule = module_;
+        this.localName = name;
+
+        // Generate the struct type info
+        CuType[] paramTypes = new CuType[parameters.length];
+        foreach(i, param; parameters) {
+
+            // Fetch the CuType from the declaration and set its mapping, might as well do both.
+            paramTypes[i] = param.type;
+            if (param.name in idxMapping) {
+                throw new Exception("There already exists a parameter called "~param.name~" in "~mangledName~"!");
+            }
+            idxMapping[param.name] = cast(uint)i;
+
+            // Update the member declaration's parent while we're at it.
+            param.parent = this;
+        }
+
+        // Set the type and make it point back to the declaration
+        this.type = createFunc(returnType, paramTypes);
+        this.funcType.declaration = this;
+    }
+
+    /**
+        The copper type of the function
+    */
+    @property
+    CuFuncType funcType() {
+        return cast(CuFuncType)type;
+    }
+
+    /**
+        Returns the mangled name of the type
+    */
+    @property
+    string mangledName() {
+        import std.array : join;
+
+        // Get the parameter type names
+        string[] tNames = new string[funcType.argumentTypes.length];
+        foreach(i, param; funcType.argumentTypes) {
+            tNames[i] = param.typeName;
+        }
+
+        return "%s%s(%s)".format((parent !is null ? parent.name~"::" : ""), this.name, tNames.length > 0 ? tNames.join(",") : "void");
+    }
+
+    /**
+        Finalizes the function.
+
+        After a function has been finalized its declaration cannot be changed.
+
+        Its body can be; though.
+    */
+    CuSection finalize() {
+        if (llvmFunc !is null) throw new Exception(this.mangledName~" is already finalized!");
+        llvmFunc = new Function(this.parentModule.llvmMod, cast(FuncType)this.funcType.llvmType, mangledName());
+        return getSection("entry");
+    }
+
+    /**
+        Gets a section from the mapping
+
+        Adds a new section if none was found
+    */
+    CuSection getSection(string name, CuSection from = null) {
+        if (name !in sectionMapping) {
+            sectionMapping[name] = new CuSection(this, llvmFunc.AppendBasicBlock(Context.Global, name), name, from);
+        }
+        return sectionMapping[name];
+    }
+}
+
+/**
+    A copper structure
+*/
+class CuStruct : CuDecl {
+private:
+    CuDecl[] members_;
+    uint[string] idxMapping;
 
 public:
     /**
-        The return type of the function
+        Creates a new struct
     */
-    CuType returnType;
+    this(CuModule module_, string name, CuDecl[] members) {
+        this.parentModule = module_;
+        this.members_ = members;
+        this.name = name;
 
-    /**
-        The types of the parameters
-    */
-    CuType[] paramTypes;
+        // Generate the struct type info
+        CuType[] memberTypes = new CuType[members.length];
+        foreach(i, member; members) {
 
-    /**
-        The parent module of a function
-    */
-    CuModule parentModule;
+            // Fetch the CuType from the declaration and set its mapping, might as well do both.
+            memberTypes[i] = member.type;
+            if (member.name in idxMapping) {
+                throw new Exception("There already exists a member called "~member.name~" in "~name~"!");
+            }
+            idxMapping[member.name] = cast(uint)i;
 
-    /**
-        The parent struct or class of a function
-    */
-    CuDecl parent;
-
-    @property
-    string mangledName() {
-        string[] tNames;
-        foreach(param; paramTypes) {
-
+            // Update the member declaration's parent while we're at it.
+            member.parent = this;
         }
 
-        return "%s%s(%s)".format((parent !is null ? parent.name~"::" : ""), this.name, );
+        // Set up the struct and make so that the type points back to the declaration
+        this.type = createStruct(name, memberTypes, false);
+        this.structType.declaration = this;
     }
 
+    /**
+        Gets the struct type of this struct
+    */
+    @property
+    CuStructType structType() {
+        return cast(CuStructType)type;
+    }
+
+    /**
+        Tries to find a member in the struct, returns the offset if found or -1 if not.
+    */
+    int findMemberIndex(string name) {
+        return (name in idxMapping ? cast(int)idxMapping[name] : -1);
+    }
+
+    /**
+        The struct members
+    */
+    @property
+    CuDecl[] members() {
+        return members_;
+    }
 }
 
 class CuClass : CuDecl {
 
 }
 
-class CuStruct : CuDecl {
+/**
+    A copper value
+*/
+class CuValue {
+    /**
+        The copper type
+    */
+    CuType type;
 
+    /**
+        The name of the value/variable
+    */
+    string name;
+
+    /**
+        The llvm value
+    */
+    Value llvmValue;
+
+    /**
+        Creates a new copper value
+    */
+    this(CuType type, Value value) {
+        this.type = type;
+        this.llvmValue = value;
+        this.name = llvmValue.Name;
+    }
 }
