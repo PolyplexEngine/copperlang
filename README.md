@@ -5,6 +5,8 @@ Inspiration is taken from Go, D and Lua for the syntax.
 
 See some of the tests in the tests/ directory.
 
+# Building
+When building copper for release mode it's important to have the build flag --build-mode=allAtOnce or the compilation will freeze at llvm-d.
 
 
 # License
