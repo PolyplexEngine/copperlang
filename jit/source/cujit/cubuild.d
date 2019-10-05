@@ -485,6 +485,9 @@ class CuState {
 public:
     CuModule[] modules;
 
+    /**
+        Adds a module to the state
+    */
     CuModule addModule(string name, Node* ast) {
         CuModule mod = new CuModule(name, ast);
         modules ~= mod;
@@ -574,6 +577,7 @@ public:
 */
 class CuModule {
 private:
+    CuState parentState;
     string name_;
     Node* ast;
     string[] imports;
@@ -588,22 +592,58 @@ package(cujit):
 
 public:
 
-    this(string name, Node* ast) {
+    /**
+        Creates a new module
+    */
+    this(CuState state, string name, Node* ast) {
         this.llvmMod = new Module(name);
         this.ast = ast;
         this.name_ = name;
+        this.parentState = state;
     }
 
+    /**
+        Add module import
+    */
     void addImport(string import_) {
         this.imports ~= import_;
     }
 
+    /**
+        The name of the module
+    */
     string name() {
         return name_;
     }
 
+    /**
+        The LLVM IR of the module
+    */
     string getIR() {
         return llvmMod.toString();
+    }
+
+    /**
+        Try to find a type (across all modules)
+    */
+    CuType findType(string type) {
+        return parentState.findType(type);
+    }
+
+    /**
+        Try to find a type (across all modules)
+    */
+    CuDecl findDeclaration(string name) {
+        return parentState.findDeclaration(name);
+    }
+
+    /**
+        Try to find a function (across all modules)
+
+        Note: this takes the local name, not the mangled name.
+    */
+    CuFunction findFunction(string name, CuType[] typeMatch) {
+        return parentState.findFunction(name, typeMatch);
     }
 }
 
