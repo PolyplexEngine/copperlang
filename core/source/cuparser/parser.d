@@ -4,7 +4,6 @@ import culexer;
 import cucore.strutils;
 import cucore.token;
 import cucore.node;
-import cuparser.types;
 import cucore.ast;
 import std.conv;
 import std.format;
@@ -21,8 +20,6 @@ private:
     Token curToken;
     Lexer lexer;
     bool doSkipComments;
-
-    TypeMapping mapping;
 
     void getToken(Token* token, string func = __PRETTY_FUNCTION__) {
         prevToken = curToken;
@@ -108,28 +105,6 @@ private:
         return new Node(tk);
     }
 
-    void addType(Token basedOn, TypeId id) {
-        import std.algorithm.searching : canFind;
-        if (mapping.hasType(basedOn)) {
-            error("Type with name "~basedOn.lexeme~" already exists in "~mapping.mod~"!", &basedOn);
-        }
-        mapping.add(RoughType(id, basedOn.lexeme));
-        writeln("Added type of ", basedOn.lexeme, "...");
-    }
-
-    void updateType(Token* tk) {
-        if (match(*tk, [tkIdentifier])) {
-            if (mapping.hasType(*tk)) {
-                if (mapping.get(*tk).typeId == tpClass) {
-                    tk.id = tkClass;
-                }
-                if (mapping.get(*tk).typeId == tpStruct) {
-                    tk.id = tkStruct;
-                }
-            }
-        }
-    }
-
     void skipComments() {
         Token tk;
         getToken(&tk);
@@ -182,7 +157,6 @@ private:
                 visitor = visitor.firstChild;
             }
         }
-        mapping.mod = mod;
     }
 
     void scanRoot() {
@@ -219,7 +193,6 @@ private:
 
         getToken(&name);
         getToken(&tk);
-        addType(name, tpClass);
 
         while (!match(tk, [tkStartScope, tkEndStatement]) && !eof) {
             getToken(&tk);
@@ -234,7 +207,6 @@ private:
 
         getToken(&name);
         getToken(&tk);
-        addType(name, tpStruct);
 
         while (!match(tk, [tkStartScope, tkEndStatement]) && !eof) {
             getToken(&tk);
@@ -580,7 +552,6 @@ private:
 
         // Get type of declaration
         peekNext(&type);
-        if (mapping.hasType(type)) updateType(&type);
 
         if (!isType(type)) {
             error("Expected type defintion!");
@@ -656,7 +627,7 @@ private:
             tkString,
             tkChar,
             tkPtr
-        ]) || mapping.hasType(tk) || match(tk, [tkIdentifier]));
+        ]) || match(tk, [tkIdentifier]));
     }
 
     /*
@@ -1251,9 +1222,5 @@ public:
         scanTypes();
 
         return module_();
-    }
-
-    TypeMapping getMapping() {
-        return mapping;
     }
 }
