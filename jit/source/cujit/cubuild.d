@@ -556,9 +556,16 @@ public:
                 // Skip non-functions
                 if (decl.type.typeKind != CuTypeKind.function_) continue;
 
+                CuFunction funcDecl = cast(CuFunction)decl;
 
+                // If the local (non-mangled) name matches
+                if (funcDecl.name == name) {
+                    // TODO: do the type level matching
+                    return funcDecl;
+                }
             }
         }
+        return null;
     }
 }
 
@@ -676,14 +683,13 @@ class CuFunction : CuDecl {
 private:
     Function llvmFunc;
     int[string] idxMapping;
-    string localName;
     CuSection[string] sectionMapping;
 
 public:
     this(CuModule module_, CuType returnType, string name, CuDecl[] parameters) {
 
         this.parentModule = module_;
-        this.localName = name;
+        this.name = name;
 
         // Generate the struct type info
         CuType[] paramTypes = new CuType[parameters.length];
