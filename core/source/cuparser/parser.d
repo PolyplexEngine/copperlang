@@ -588,23 +588,53 @@ private:
                                     Misc
     */
 
-    Node* type() {
+    Node* typeArray() {
         Token tk;
         Token tk2;
+
+        getToken(&tk);
+        if (match(tk, [tkOpenBracket])) {
+            consume(tkCloseBracket, "Expected ']'!");
+            getToken(&tk2);
+
+            // We're starting an array, pre-check
+            if (match(tk2, [tkOpenBracket])) {
+
+                // Rewind back, recall this function and get the array portion
+                rewindTo(&tk2);
+                tk.length++;
+                tk.id = tkArray;
+                Node* n = typeArray();
+                n.add(new Node(tk));
+                return n.firstChild;
+            }
+
+            rewindTo(&tk2);
+            tk.length++;
+            tk.id = tkArray;
+            return new Node(tk);
+        }
+
+        rewindTo(&tk);
+        return null;
+    }
+
+    Node* type() {
+        Token tk;
+
         getToken(&tk);
         if (isType(tk)) {
-            // Array handling
-            getToken(&tk2);
-            if (match(tk2, [tkOpenBracket])) {
-                Token brck = tk2;
-                tk2 = consume(tkCloseBracket, "Invalid array type specification!");
-                brck.length++;
-                brck.id = tkArray;
-                Node* arrNode = new Node(brck);
-                arrNode.add(new Node(tk));
-                return arrNode;
+
+            Node* arr = typeArray();
+            if (arr !is null) {
+                arr.add(new Node(tk));
+
+                // Move back up our array chain to the top level parent of it, this is the outer most array
+                while (arr.parent !is null) {
+                    arr = arr.parent;
+                }
+                return arr;
             }
-            rewindTo(&tk2);
             return new Node(tk);
         }
         rewindTo(&tk);
