@@ -10,19 +10,312 @@ import std.stdio;
 */
 struct CuFuncBuildContext {
 private:
-    CuModule parentModule;
-    CuDecl parent;
     CuFunction self;
-    
     Node* ast;
+    Builder builder;
+    CuValue[string] allocatedStackVars;
+
+    void buildBody(CuSection section) {
+        builder.PositionAtStart(section.llvmBlock);
+        Node* bodyleaf = ast.firstChild;
+
+        // Allocate all variables on the stack
+        foreach(name, param; self.parameters) {
+            this.allocateStackVar(param.type, name, self.getParam(name));
+        }
+
+        // Start parsing the body
+        if (bodyleaf !is null) {
+            do {
+                switch(bodyleaf.id) {
+                    case astReturn:
+                        buildRet(bodyleaf);
+                        break;
+
+                    case astDeclaration:
+                        Node* nameNode = bodyleaf.firstChild;
+                        Node* assignExpr = nameNode.firstChild;
+                        CuType type = self.parentModule.findType(bodyleaf.token.lexeme);
+
+                        // If there's no assignment expression, skip that part
+                        if (assignExpr is null) {
+                            this.allocateStackVar(type, nameNode.token.lexeme);
+                            break;
+                        }
+
+                        this.allocateStackVar(type, nameNode.token.lexeme, buildExpression(assignExpr, type));
+                        break;
+
+                    case astAssignment:
+                        CuValue value = allocatedStackVars[bodyleaf.token.lexeme];
+                        Node* op = bodyleaf.firstChild;
+                        switch(bodyleaf.token.id) {
+                            case tkAddAssign:
+                                buildAssign(value, buildBinOp("+", buildFetch(value, value.type), buildExpression(op, value.type), value.type));
+                                break;
+                            case tkSubAssign:
+                                buildAssign(value, buildBinOp("-", buildFetch(value, value.type), buildExpression(op, value.type), value.type));
+                                break;
+                            case tkMulAssign:
+                                buildAssign(value, buildBinOp("*", buildFetch(value, value.type), buildExpression(op, value.type), value.type));
+                                break;
+                            case tkDivAssign:
+                                buildAssign(value, buildBinOp("/", buildFetch(value, value.type), buildExpression(op, value.type), value.type));
+                                break;
+
+                            default:
+                                buildAssign(value, buildExpression(op, value.type));
+                                break;
+                        }
+                        break;
+
+                    default:
+                        throw new Exception(bodyleaf.name ~ " is not implemented yet.");
+                }
+
+                // Go to next leaf
+                bodyleaf = bodyleaf.right;
+            } while (bodyleaf !is null);
+        }
+
+        // Automatically return void at end of void function
+        if (self.returnType.typeKind == CuTypeKind.void_) {
+            builder.BuildRetVoid();
+        }
+    }
+
+    void buildRet(Node* idx) {
+        if (idx.firstChild !is null) {
+            CuValue exprVal = buildExpression(idx.firstChild, self.returnType);
+            enforceTypeCompat(exprVal, self.returnType);
+            builder.BuildRet(buildImplicitCast(exprVal, self.returnType).llvmValue);
+            return;
+        }
+
+        // Return void if no expression provided
+        if (self.returnType.typeKind != CuTypeKind.void_) {
+            // TODO: proper exception
+            throw new Exception("Cannot return void from a "~self.returnType.typeName~" function!");
+        }
+        builder.BuildRetVoid();
+    }
+
+    CuValue buildExpression(Node* op, CuType expectedType) {
+        Node* lhsn = op.firstChild;
+        Node* rhsn = op.lastChild;
+        switch(op.token.id) {
+            case tkAdd, tkSub, tkMul, tkDiv:
+                CuValue lhs = buildExpression(lhsn, expectedType);
+                CuValue rhs = buildExpression(rhsn, expectedType); 
+                return buildBinOp(op.token.lexeme, lhs, rhs, expectedType);
+            case tkAs:
+                CuValue from = buildExpression(lhsn, expectedType);
+                CuType to = self.parentModule.findType(rhsn.token.lexeme);
+                return buildCast(from, to, expectedType);
+            default: 
+                return buildFetch(op, expectedType);
+        }
+    }
+
+    void enforceTypeCompat(CuValue val, CuType expectedType) {
+        // Verify that the types are compatible.
+        if (!expectedType.isImplicitCompatibleWith(val.type)) {
+            throw new Exception(val.name ~ " is not compatible with type "~expectedType.typeName);
+        }
+    }
+
+    void enforceTypeCompat(CuValue lhs, CuValue rhs) {
+        // Verify that the types are compatible.
+        if (!lhs.type.isImplicitCompatibleWith(rhs.type)) {
+            throw new Exception(lhs.name ~ " is not compatible with " ~ rhs.name);
+        }
+    }
+
+    CuValue buildBinOp(string op, CuValue lhs, CuValue rhs, CuType expectedType) {
+        enforceTypeCompat(lhs, rhs);
+
+        rhs = buildImplicitCast(lhs, rhs);
+
+        switch(op) {
+            case "+":
+                if (lhs.type.isIntegral) {
+                    return new CuValue(lhs.type, builder.BuildAdd(lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(lhs.type, builder.BuildFAdd(lhs.llvmValue, rhs.llvmValue));
+                }
+                return null;
+
+            case "-":
+                if (lhs.type.isIntegral) {
+                    return new CuValue(lhs.type, builder.BuildSub(lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(lhs.type, builder.BuildFSub(lhs.llvmValue, rhs.llvmValue));
+                }
+                return null;
+
+            case "*":
+                if (lhs.type.isIntegral) {
+                    return new CuValue(lhs.type, builder.BuildMul(lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(lhs.type, builder.BuildFMul(lhs.llvmValue, rhs.llvmValue));
+                }
+                return null;
+
+            case "/":
+                if (lhs.type.isIntegral) {
+                    return new CuValue(lhs.type, builder.BuildSDiv(lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(lhs.type, builder.BuildFDiv(lhs.llvmValue, rhs.llvmValue));
+                }
+                return null;
+
+            default: throw new Exception("Unsupported operation of "~op~"!");
+        }
+
+    }
+
+    CuValue buildImplicitCast(CuValue lhs, CuValue rhs) {
+        return buildImplicitCast(rhs, lhs.type);
+    }
+
+    CuValue buildImplicitCast(CuValue from, CuType to) {
+        // Implicit up-cast
+        if (from.type.sizeOf <= to.sizeOf) {
+            return buildSizeCast(from, to);
+        }
+
+        throw new Exception("Cannot down-cast type implictly, use 'as "~to.typeName~"' to down-cast.");
+    }
+
+    CuValue buildSizeCast(CuValue from, CuType to) {
+
+        // They are the same type, skip casting.
+        // Note this will break if you try to size cast between non-numeric types.
+        if (from.type.typeKind == to.typeKind) return from;
+
+        if (from.type.isFloating) {
+
+            // It's essentially the same type, just change our interpretation
+            if (from.type.sizeOf == to.sizeOf) {
+                from.type = to;
+                return from;
+            }
+
+            // LLVM should figure out if it's an up-cast or downcast automatically
+            return new CuValue(to, builder.BuildFPCast(from.llvmValue, to.llvmType));
+        }
+
+        if (from.type.isIntegral) {
+
+            // It's essentially the same type, just change our interpretation
+            if (from.type.sizeOf == to.sizeOf) {
+                from.type = to;
+                return from;
+            }
+
+            // LLVM should figure out if it's an up-cast or downcast automatically
+            return new CuValue(to, builder.BuildIntCast(from.llvmValue, to.llvmType, from.type.isSigned));
+        }
+
+        // Just act like it works
+        return from;
+        // throw new Exception("Unable to size cast type "~from.type.typeName~"!");
+    }
+
+    CuValue buildCast(CuValue from, CuType to, CuType expectedType) {
+        
+        if (to.isFloating()) {
+            
+            // Size casting
+            if (from.type.isFloating()) return buildSizeCast(from, to);
+
+            // float to int
+            if (from.type.isIntegral()) {
+                // Signed cast
+                if (from.type.isSigned()) {
+                    return new CuValue(to, builder.BuildSIToFP(from.llvmValue, to.llvmType));
+                }
+
+                // Unsigned cast
+                return new CuValue(to, builder.BuildUIToFP(from.llvmValue, to.llvmType));
+            }
+        }
+
+        if (to.isIntegral()) {
+
+            // Size casting
+            if (from.type.isIntegral()) return buildSizeCast(from, to);
+
+            // int to float
+            if (from.type.isFloating()) {
+
+                // Signed cast
+                if (to.isSigned()) {
+                    return new CuValue(to, builder.BuildFPToSI(from.llvmValue, to.llvmType));
+                }
+
+                // Unsigned cast
+                return new CuValue(to, builder.BuildFPToUI(from.llvmValue, to.llvmType));
+            }
+        }
+        throw new Exception("Invalid cast from "~from.type.typeName ~ " to " ~ to.typeName);
+    }
+
+    /**
+        Allocate stack variable with data
+    */
+    CuValue allocateStackVar(CuType type, string name, CuValue data) {
+        CuValue stackAlloc = allocateStackVar(type, name);
+        builder.BuildStore(data.llvmValue, stackAlloc.llvmValue);
+        return stackAlloc;
+    }
+
+    /**
+        Allocate stack variable
+    */
+    CuValue allocateStackVar(CuType type, string name) {
+        Value stackAlloc = builder.BuildAlloca(type.llvmType, name);
+        allocatedStackVars[name] = new CuValue(type, stackAlloc);
+        return allocatedStackVars[name];
+    }
+
+    CuValue buildFetch(Node* val, CuType expectedType) {
+        if (val.token.id == tkIdentifier) {
+            CuValue addr = this.allocatedStackVars[val.token.lexeme];
+            // Probably a variable
+            return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
+        }
+        return buildLiteral(val, expectedType);
+    }
+
+    CuValue buildFetch(CuValue addr, CuType expectedType) {
+        return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
+    }
+
+    void buildAssign(CuValue to, CuValue value) {
+        builder.BuildStore(value.llvmValue, to.llvmValue);
+    }
+
+    CuValue buildLiteral(Node* val, CuType expectedType) {
+        switch(val.token.id) {
+            case tkIntLiteral:
+                return constIntegral(expectedType, cast(ulong)(val.token.lexeme.to!long));
+            case tkNumberLiteral:
+                return constFloating(expectedType, val.token.lexeme.to!double);
+            case tkStringLiteral, tkMultilineStringLiteral:
+                // Cut out the quotes.
+                string stringVal = val.token.lexeme[1..$-1];
+                CuValue global = self.parentModule.addGlobalConstVar(createString(), constStringLiteral(stringVal));
+                return constString(global, stringVal.sizeof);
+            default: throw new Exception("Unsupported literal.");
+        }
+    }
 
 public:
     /**
         Constructs a new building context
     */
-    this(CuModule mod, CuFunction self, CuDecl parent = null) {
-        this.parentModule = mod;
-        this.parent = parent;
+    this(CuFunction self) {
         this.self = self;
     }
 
@@ -31,9 +324,11 @@ public:
     
         Returns true if the build succeeded with no problems
     */
-    bool build(Node* astNode) {
+    bool build() {
         try {
-            this.ast = astNode;
+            this.ast = self.bodyAST;
+            builder = new Builder();
+            buildBody(self.finalize());
         } catch (Exception ex) {
             // TODO: better error messages
             writefln("An error occured during compilation\nMessage: %s", ex.msg);
@@ -42,321 +337,3 @@ public:
         return true;
     }
 }
-
-// void buildFunctionBody(CuBuilder cbld, Node* ast, CuFunction* func) {
-//     Builder builder = new Builder(Context.Global);
-//     builder.PositionAtStart(func.getSection("entry"));
-
-//     Function llvmF = func.llvmFunc();
-
-//     Node* statements = ast.firstChild;
-
-//     // Go through the body and compile all the statements
-//     if (statements !is null) {
-//         do {
-//             switch(statements.id) {
-//                 case astReturn:
-//                     buildReturn(builder, statements, func);
-//                     break;
-
-//                 case astFunctionCall:
-//                     buildFuncCallExpr(builder, statements, func);
-//                     break;
-
-//                 case astDeclaration:
-//                     Node* nameNode = statements.firstChild;
-//                     string declname = nameNode.token.lexeme;
-
-//                     Type variableType = stringToBasicType(Context.Global, statements.token.lexeme);
-
-//                     func.declareVariable(variableType, declname, builder.BuildAlloca(variableType, declname));
-                    
-//                     Value val = func.findVariableAddr(declname);
-//                     Type type = func.findVariableType(declname);
-
-//                     // If we also got assignment, do the assignment
-//                     if (nameNode.firstChild !is null) {
-//                         builder.BuildStore(buildExpr(builder, nameNode.firstChild, func, type), val);
-//                     }
-//                     break;
-//                 case astAssignment:
-//                     Value val = func.findVariableAddr(statements.token.lexeme);
-//                     Type type = func.findVariableType(statements.token.lexeme);
-//                     builder.BuildStore(buildExpr(builder, statements.firstChild, func, type), val);
-//                     break;
-//                 default: throw new Exception("Not implemented");
-//             }
-
-//             statements = statements.right;
-//         } while(statements !is null);
-//     }
-
-//     // Automatically append a return void statement for void functions
-//     if (func.llvmType.ReturnType.Kind == TypeKind.Void) {
-//         builder.BuildRetVoid();   
-//     }
-// }
-
-// /**
-//     Builds a return statement
-// */
-// void buildReturn(Builder builder, Node* ast, CuFunction* func) {
-    
-//     // Void return if we have no return expression
-//     if (ast.firstChild is null) {
-//         builder.BuildRetVoid();
-//     }
-
-//     // Return with expression
-//     builder.BuildRet(buildExpr(builder, ast.firstChild, func));
-// }
-
-// Value buildExpr(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     switch(ast.token.id) {
-//         case tkAdd:
-//             return buildAdd(builder, ast, func, constType);
-
-//         case tkSub:
-//             return buildSub(builder, ast, func, constType);
-
-//         case tkMul:
-//             return buildMul(builder, ast, func, constType);
-
-//         case tkDiv:
-//             return buildDiv(builder, ast, func, constType);
-
-//         case tkMod:
-//             return buildDiv(builder, ast, func, constType);
-
-//         case tkIdentifier:
-
-//             // Function call expression
-//             if (ast.id == astFunctionCall) {
-//                 return buildFuncCallExpr(builder, ast, func);
-//             }
-
-//             return func.findValue(ast.token.lexeme, builder);
-
-//         default:
-//             // Constant expression
-//             if (isConst(ast)) {
-//                 return buildConst(builder, ast, func, constType);
-//             }
-//             throw new Exception("Invalid token or unimplemented!");
-//     }
-// }
-
-// /**
-//     Build add instruction
-// */
-// Value buildAdd(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Node* valANode = ast.firstChild;
-//     Node* valBNode = ast.lastChild;
-//     Value valA;
-//     Value valB;
-
-//     // lhs expr
-//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valA = buildExpr(builder, valANode, func);
-//     } else {
-//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-//         else valA = func.findValue(valANode.token.lexeme, builder);
-//     }
-
-//     // rhs expr
-//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valB = buildExpr(builder, valBNode, func);
-//     } else {
-//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-//         else valB = func.findValue(valBNode.token.lexeme, builder);
-//     }
-
-//     // add
-//     switch(valA.TypeOf.Kind) {
-//         case TypeKind.Int:
-//             return builder.BuildAdd(valA, valB);
-//         case TypeKind.Float32, TypeKind.Float64:
-//             return builder.BuildFAdd(valA, valB);
-//         default: throw new Exception("Invalid operation");
-//     }
-// }
-
-// /**
-//     Build add instruction
-// */
-// Value buildSub(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Node* valANode = ast.firstChild;
-//     Node* valBNode = ast.lastChild;
-//     Value valA;
-//     Value valB;
-
-//     // lhs expr
-//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valA = buildExpr(builder, valANode, func);
-//     } else {
-//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-//         else valA = func.findValue(valANode.token.lexeme, builder);
-//     }
-
-//     // rhs expr
-//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valB = buildExpr(builder, valBNode, func);
-//     } else {
-//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-//         else valB = func.findValue(valBNode.token.lexeme, builder);
-//     }
-
-//     // add
-//     switch(valA.TypeOf.Kind) {
-//         case TypeKind.Int:
-//             return builder.BuildSub(valA, valB);
-//         case TypeKind.Float32, TypeKind.Float64:
-//             return builder.BuildFSub(valA, valB);
-//         default: throw new Exception("Invalid operation");
-//     }
-// }
-
-// /**
-//     Build add instruction
-// */
-// Value buildMul(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Node* valANode = ast.firstChild;
-//     Node* valBNode = ast.lastChild;
-//     Value valA;
-//     Value valB;
-
-//     // lhs expr
-//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valA = buildExpr(builder, valANode, func);
-//     } else {
-//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-//         else valA = func.findValue(valANode.token.lexeme, builder);
-//     }
-
-//     // rhs expr
-//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valB = buildExpr(builder, valBNode, func);
-//     } else {
-//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-//         else valB = func.findValue(valBNode.token.lexeme, builder);
-//     }
-
-//     // add
-//     switch(valA.TypeOf.Kind) {
-//         case TypeKind.Int:
-//             return builder.BuildMul(valA, valB);
-//         case TypeKind.Float32, TypeKind.Float64:
-//             return builder.BuildFMul(valA, valB);
-//         default: throw new Exception("Invalid operation");
-//     }
-// }
-
-// /**
-//     Build add instruction
-// */
-// Value buildDiv(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Node* valANode = ast.firstChild;
-//     Node* valBNode = ast.lastChild;
-//     Value valA;
-//     Value valB;
-
-//     // lhs expr
-//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valA = buildExpr(builder, valANode, func);
-//     } else {
-//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-//         else valA = func.findValue(valANode.token.lexeme, builder);
-//     }
-
-//     // rhs expr
-//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valB = buildExpr(builder, valBNode, func);
-//     } else {
-//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-//         else valB = func.findValue(valBNode.token.lexeme, builder);
-//     }
-
-//     // add
-//     switch(valA.TypeOf.Kind) {
-//         case TypeKind.Int:
-//             return builder.BuildSDiv(valA, valB);
-//         case TypeKind.Float32, TypeKind.Float64:
-//             return builder.BuildFDiv(valA, valB);
-//         default: throw new Exception("Invalid operation");
-//     }
-// }
-
-// /**
-//     Build add instruction
-// */
-// Value buildMod(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Node* valANode = ast.firstChild;
-//     Node* valBNode = ast.lastChild;
-//     Value valA;
-//     Value valB;
-
-//     // lhs expr
-//     if (valANode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valA = buildExpr(builder, valANode, func);
-//     } else {
-//         if (isConst(valANode)) valA = buildConst(builder, valANode, func, constType);
-//         else valA = func.findValue(valANode.token.lexeme, builder);
-//     }
-
-//     // rhs expr
-//     if (valBNode.id == astExpression || valBNode.id == astFunctionCall) {
-//         valB = buildExpr(builder, valBNode, func);
-//     } else {
-//         if (isConst(valBNode)) valB = buildConst(builder, valBNode, func, constType);
-//         else valB = func.findValue(valBNode.token.lexeme, builder);
-//     }
-
-//     // add
-//     switch(valA.TypeOf.Kind) {
-//         case TypeKind.Int:
-//             return builder.BuildSRem(valA, valB);
-//         default: throw new Exception("Can't get the remainder of a float value");
-//     }
-// }
-
-// Value buildFuncCallExpr(Builder builder, Node* ast, CuFunction* func) {
-//     string funcToCall = ast.token.lexeme;
-
-//     Value[] paramOut;
-
-//     Node* params = ast.firstChild;
-//     if (params.firstChild !is null) {
-//         uint i = 0;
-//         params = params.firstChild;
-//         do {
-//             paramOut ~= buildExpr(builder, params, func);
-//             i++;
-//             params = params.right;
-//         } while (params !is null);
-//     }
-
-//     Function otherFunc = func.findFunction(funcToCall, paramOut);
-//     return builder.BuildCall(otherFunc, paramOut);
-// }
-
-// /**
-//     Returns true if the node leaf is a constant value
-// */
-// bool isConst(Node* ast) {
-//     return (ast.token.id == tkIntLiteral || ast.token.id == tkNumberLiteral);
-// }
-
-// Value buildConst(Builder builder, Node* ast, CuFunction* func, Type constType = null) {
-//     Context ctx = Context.Global;
-
-//     switch(ast.token.id) {
-//         case tkIntLiteral:
-//             return new ConstInt(constType !is null ? constType : ctx.CreateInt64(), ast.token.lexeme, 10);
-//         case tkNumberLiteral:
-//             return new ConstReal(constType !is null ? constType : ctx.CreateFloat32(), ast.token.lexeme.to!float);
-//         case tkNullLiteral:
-//             return new Null(constType !is null ? constType : ctx.CreateInt32());
-
-//         default: throw new Exception("Not a constant value!");
-//     }
-// }

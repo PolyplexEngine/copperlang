@@ -5,13 +5,15 @@ import cucore.node;
 import cujit;
 import dllvm;
 import std.file;
+import std.conv;
 
 void main(string[] args)
 {
 	initJIT();
 	JITEngine engine = new JITEngine();
 	engine.compileScriptFile(args[1]);
+	writeln("");
 	engine.printAllIR();
-
-	//writeln(engine.call!(int)(args[2], 5));
+	writeln("\n===CALL===");
+	writeln(engine.call!(string)("main(string)", "Hello, world!"));
 }

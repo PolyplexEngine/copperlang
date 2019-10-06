@@ -17,16 +17,25 @@ class CuBuilder {
 package(cujit):
     Builder builder;
     JITEngine engine;
+    CuState state;
+
+    Node*[] funcsToScan;
 
 private:
     CuModule buildRoot(Node* root) {
-        CuModule module_ = new CuModule(scanModuleDecl(root.firstChild), root);
+        CuModule module_ = new CuModule(state, scanModuleDecl(root.firstChild), root);
         scanImports(root.firstChild, module_);
         scanTypes(root.firstChild, module_);
 
-        // foreach(CuFunction globalFunc; module_.globalFunctions) {
-        //     buildFunction(globalFunc);
-        // }
+
+        foreach(CuDecl decl; module_.weakDeclarations) {
+            if (decl.type.typeKind == CuTypeKind.function_) {
+                CuFuncBuildContext(cast(CuFunction)decl).build();
+            }
+        }
+
+        // All declarations should be strong at this point.
+        module_.weakDeclarations = [];
         return module_;
     }
 
@@ -70,59 +79,64 @@ private:
        do {
 
             if (root.id == astFunction) {
-                //scanFunction(root, module_.addFunction(root, Visibility.Global, FuncKind.Global, root.token.lexeme));
+                funcsToScan ~= root;
             }
 
             // Go to next branch
             root = root.right;
         } while(root !is null);
+
+        // After all other types are resolved, start scanning functions
+        foreach(func; funcsToScan) {
+            scanFunction(func, module_);
+        }
+        funcsToScan = [];
     }
 
-    void scanFunction(Node* root, CuFunction func) {
-        // Type returnType;
-        // Type[] paramTypes;
-        // // LLVM Types and copper types are expressed differently
-        // string[] paramCuTypes;
+    void scanFunction(Node* root, CuModule mod) {
 
-        // FuncType funcType;
-        // Function funcInst;
+        // The name of the function
+        immutable(string) name = root.token.lexeme;
+        CuDecl[] params;
+        CuType returnType;
+        
+        Node* paramDefList = root.firstChild;
+        params.length = paramDefList.childrenCount();
+        if (paramDefList.firstChild !is null) {
 
-        // Node* body;        
+            // Iterate through every parameter and build their type.
+            Node* param = paramDefList.firstChild;
+            size_t i = 0;
+            do {
+                CuDecl decl = nodeToParamDecl(param, mod);
+                params[i++] = decl;
+                param = param.right;
+            } while (param !is null);
+        }
+        Node* bodyOrReturnType = paramDefList.right;
+        if (bodyOrReturnType.id != astBody) {
+            returnType = nodeToType(bodyOrReturnType);
+            bodyOrReturnType = bodyOrReturnType.right;
+        }
+        
+        CuFunction func = new CuFunction(mod, returnType, name, params);
+        func.setBodyAST(bodyOrReturnType);
+        mod.addWeakDeclaration(func);
+    }
 
-        // /// Scan parameters
-        // Node* paramdefList = root.firstChild;
-        // Node* param = paramdefList.firstChild;
-        // if (param !is null) {
-        //     do {
-        //         string paramType = param.token.lexeme;
-        //         string paramName = param.firstChild.token.lexeme;
+    CuDecl nodeToParamDecl(Node* node, CuModule mod) {
+        return new CuDecl(mod, nodeToType(node.firstChild), node.token.lexeme);
+    }
 
-        //         func.addParam(paramName);
-        //         paramTypes ~= stringToBasicType(Context.Global, paramType);
-        //         paramCuTypes ~= paramType;
+    CuType nodeToType(Node* node) {
+        switch (node.token.id) {
+            case tkArray:
+                return createDynamicArray(nodeToType(node.firstChild));
 
-        //         param = param.right;
-        //     } while(param !is null);
-        // }
-
-        // /// Scan return type
-        // Node* retType = paramdefList.right;
-        // if (retType.id != astBody) {
-
-        //     // We have a return type, set it
-        //     returnType = stringToBasicType(Context.Global, retType.token.lexeme);
-        //     body = retType.right;
-        // } else {
-        //     returnType = stringToBasicType(Context.Global, "void");
-        //     body = retType;
-        // }
-
-        // // Do the magic that turns this in to an LLVM function
-        // funcType = Context.Global.CreateFunction(returnType, paramTypes, false);
-        // funcInst = new Function(func.llvmModule, funcType, func.mangleFunc(paramCuTypes));
-        // func.finish(funcType, funcInst);
-        // func.addSection("entry", funcInst.AppendEntryBlock());
-        // func.assignBody(body);
+            default:
+                // If it's nothing of the above it's probably a type
+                return createTypeFromName(state, node.token.lexeme);
+        }
     }
 
     void buildFunction(CuFunction* func) {
@@ -134,6 +148,7 @@ private:
 public:
     this(JITEngine engine) {
         this.engine = engine;
+        this.state = new CuState();
     }
 
     /**

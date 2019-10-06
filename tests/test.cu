@@ -7,16 +7,11 @@
 module test;
 import test2;
 
-func main(int a) int {
-
-    doSomeSideEffect();
-    return doSomeCalculation(a);
+struct myStruct {
+    int x;
+    int y;
 }
 
-func doSomeCalculation(int c) int {
-    return c;
-}
-
-func doSomeSideEffect() {
-
+func main(string test) string {
+    return test;
 }

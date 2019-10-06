@@ -38,7 +38,6 @@ public:
         CuModule mod = builder.build(readText(moduleFile));
         modules ~= mod;
         engine.AddModule(mod.llvmMod);
-        //writeln("Compiled IR\n", mod.llvmIR());
     }
 
     /**
@@ -81,8 +80,6 @@ public:
         auto fnc = (getFunction!(retType, Args)(proto));
         return fnc(args);
     }
-
-
 
     /**
         Recompiles all modules

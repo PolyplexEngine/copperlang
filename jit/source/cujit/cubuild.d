@@ -141,11 +141,94 @@ public:
     Type llvmType;
 
     /**
-        The declaration for the type
-
-        Note: this is only relevant if the type is a class or struct
+        The declaration for the type (if any)
     */
-    CuDecl typeDecl;
+    CuDecl declaration;
+
+    /**
+        Gets wether the type is an integral type.
+    */
+    @property
+    bool isIntegral() {
+        switch(typeKind) {
+            case CuTypeKind.byte_, CuTypeKind.ubyte_,
+                CuTypeKind.short_, CuTypeKind.ushort_,
+                CuTypeKind.int_, CuTypeKind.uint_,
+                CuTypeKind.long_, CuTypeKind.ulong_,
+                CuTypeKind.size_t_,
+                CuTypeKind.bool_,
+                CuTypeKind.char_:
+                    return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+        Gets the size of the type in bytes
+    */
+    @property
+    size_t sizeOf() {
+        switch(typeKind) {
+            
+            case CuTypeKind.byte_, CuTypeKind.ubyte_, CuTypeKind.char_, CuTypeKind.bool_:
+                return 1;
+            
+            case CuTypeKind.short_, CuTypeKind.ushort_:
+                return 2;
+            
+            case CuTypeKind.int_, CuTypeKind.uint_, CuTypeKind.float_:
+                return 4;
+            
+            case CuTypeKind.long_, CuTypeKind.ulong_, CuTypeKind.double_:
+                return 8;
+
+            case CuTypeKind.size_t_, CuTypeKind.ptr_, CuTypeKind.function_:
+                return size_t.sizeof;
+            
+            // For other (aggregate types) sizeOf should be implemented locally
+            default: return 0;
+        }
+    }
+
+    /**
+        Gets wether the type is a numeric type
+    */
+    bool isFloating() {
+        return (typeKind == CuTypeKind.float_ || typeKind == CuTypeKind.double_);
+    }
+
+    /**
+        Gets wether the type is a numeric type
+    */
+    bool isNumeric() {
+        return isIntegral || isFloating;
+    }
+
+    /**
+        Gets wether the integer type is signed
+    */
+    bool isSigned() {
+        return (typeKind == CuTypeKind.byte_ || typeKind == CuTypeKind.short_ || typeKind == CuTypeKind.int_ || typeKind == CuTypeKind.long_);
+    }
+
+    /**
+        Returns wether the type is (implicitly) compatible with an other type
+
+        Implicitly compatible types can be converted between without an explicit 'as' operator
+    */
+    bool isImplicitCompatibleWith(CuType other) {
+        return (this.typeKind == other.typeKind) || (isIntegral && other.isIntegral) || (isFloating && other.isFloating);
+    }
+
+    /**
+        Returns wether the type is smaller than an other type
+
+        If so, it means the type requires an implict downcast to be compatible.
+    */
+    bool isSmallerThan(CuType other) {
+        return this.sizeOf < other.sizeOf;
+    }
 }
 
 /**
@@ -244,11 +327,6 @@ class CuFuncType : CuType {
 public:
 
     /**
-        The parent declaration (if any)
-    */
-    CuFunction declaration;
-
-    /**
         The return type of the function
     */
     CuType returnType;
@@ -275,11 +353,6 @@ public:
 */
 class CuStructType : CuType {
 public:
-
-    /**
-        The parent declaration (if any)
-    */
-    CuStruct declaration;
 
     /**
         The types of the struct's members
@@ -313,6 +386,25 @@ public:
         }
 
         this.llvmType = Context.Global.CreateStruct(name, llvmTypes, isPacked);
+    }
+
+    /**
+        Creates a new function type
+    */
+    this(CuType[] members, bool isPacked = false) {
+        this.typeKind = CuTypeKind.struct_;
+        this.typeName = cast(string)CuTypeKind.struct_;
+        this.isPacked = isPacked;
+        this.name = name;
+        this.memberTypes = members;
+
+        // Convert data to LLVM suitable data
+        Type[] llvmTypes = new Type[members.length];
+        foreach(i, member; members) {
+            llvmTypes[i] = member.llvmType;
+        }
+
+        this.llvmType = Context.Global.CreateStruct(llvmTypes, isPacked);
     }
 }
 
@@ -472,6 +564,13 @@ CuStructType createStruct(string name, CuType[] memberTypes, bool isPacked = fal
 }
 
 /**
+    Creates a new struct type
+*/
+CuStructType createStruct(CuType[] memberTypes, bool isPacked = false) {
+    return new CuStructType(memberTypes, isPacked);
+}
+
+/**
     Creates a new function type
 */
 CuFuncType createFunc(CuType returnType, CuType[] paramTypes) {
@@ -489,7 +588,7 @@ public:
         Adds a module to the state
     */
     CuModule addModule(string name, Node* ast) {
-        CuModule mod = new CuModule(name, ast);
+        CuModule mod = new CuModule(this, name, ast);
         modules ~= mod;
         return mod;
     }
@@ -499,7 +598,7 @@ public:
     */
     CuType findType(string type) {
         import std.conv : to;
-
+        import std.stdio;
         // Handle arrays
         if (type.isDynamicArray) {
             return new CuPointerType(findType(type[0..$-2]));
@@ -585,9 +684,33 @@ private:
 package(cujit):
     Module llvmMod;
     CuDecl[string] declarations;
+    CuDecl[] weakDeclarations;
+    CuDecl[string] globals;
 
+    /**
+        Adds a strong (finished) declaration to the module
+    */
     void addDeclaration(string name, CuDecl declaration) {
         declarations[name] = declaration;
+    }
+
+    /**
+        Adds a weak declaration to the module
+        (one in the progress of being constructed)
+    */
+    void addWeakDeclaration(CuDecl declaration) {
+        weakDeclarations ~= declaration;
+    }
+
+    CuValue addGlobalConstVar(CuType type, CuValue value) {
+        string name = "%s.%s".format(type.typeName, globals.length);
+        GlobalVariable var = llvmMod.AddGlobalVar(value.type.llvmType, name);
+        var.Initializer = cast(Constant)value.llvmValue;
+        var.IsGlobalConst = true;
+        var.Visibility = VisibilityType.Hidden;
+        var.Significance = AddressSignificance.GloballyInsignificant;
+        globals[name] = new CuDecl(this, type, name);
+        return new CuValue(type, var);
     }
 
 public:
@@ -651,6 +774,9 @@ public:
     A copper declaration
 */
 class CuDecl {
+private:
+    this() { }
+
 public:
 
     /**
@@ -677,6 +803,22 @@ public:
         The visibility of this declaration
     */
     Visibility visibility;
+
+    /**
+        The LLVM offset if any
+    */
+    size_t offset;
+
+    /**
+        Creates a new copper declaration
+    */
+    this(CuModule module_, CuType type, string name, CuDecl parent = null, Visibility visibility = Visibility.Local) { 
+        this.parentModule = module_;
+        this.type = type;
+        this.name = name;
+        this.parent = parent;
+        this.visibility = visibility;
+    }
 }
 
 /**
@@ -722,8 +864,11 @@ public:
 class CuFunction : CuDecl {
 private:
     Function llvmFunc;
-    int[string] idxMapping;
+    CuDecl[string] idxMapping;
     CuSection[string] sectionMapping;
+
+package(cujit):
+    Node* bodyAST;
 
 public:
     this(CuModule module_, CuType returnType, string name, CuDecl[] parameters) {
@@ -740,7 +885,8 @@ public:
             if (param.name in idxMapping) {
                 throw new Exception("There already exists a parameter called "~param.name~" in "~mangledName~"!");
             }
-            idxMapping[param.name] = cast(uint)i;
+            idxMapping[param.name] = param;
+            param.offset = i;
 
             // Update the member declaration's parent while we're at it.
             param.parent = this;
@@ -757,6 +903,14 @@ public:
     @property
     CuFuncType funcType() {
         return cast(CuFuncType)type;
+    }
+
+    /**
+        Gets the return type of this function
+    */
+    @property
+    CuType returnType() {
+        return funcType.returnType;
     }
 
     /**
@@ -786,6 +940,11 @@ public:
         if (llvmFunc !is null) throw new Exception(this.mangledName~" is already finalized!");
         llvmFunc = new Function(this.parentModule.llvmMod, cast(FuncType)this.funcType.llvmType, mangledName());
 
+        // The AST should be removed at this point to save memory
+        // As it should have been copied in to the compiler context
+        // Before finalization.
+        destroy(bodyAST);
+
         // The function is finalized, add it to the module's declarations list
         this.parentModule.addDeclaration(mangledName, this);
 
@@ -802,6 +961,31 @@ public:
             sectionMapping[name] = new CuSection(this, llvmFunc.AppendBasicBlock(Context.Global, name), name, from);
         }
         return sectionMapping[name];
+    }
+
+    /**
+        Gets a function parameter
+
+        Returns null if the parameter wasn't found
+    */
+    CuValue getParam(string name) {
+        if (name !in idxMapping) return null;
+        return new CuValue(idxMapping[name].type, llvmFunc.GetParam(cast(uint)idxMapping[name].offset));
+    }
+
+    /**
+        Gets the index mapped parameters.
+    */
+    @property
+    CuDecl[string] parameters() {
+        return idxMapping;
+    }
+
+    /**
+        Sets the body ast
+    */
+    void setBodyAST(Node* ast) {
+        this.bodyAST = ast;
     }
 }
 
@@ -877,6 +1061,10 @@ class CuClass : CuDecl {
     A copper value
 */
 class CuValue {
+private:
+    this() { }
+
+public:
     /**
         The copper type
     */
@@ -900,4 +1088,173 @@ class CuValue {
         this.llvmValue = value;
         this.name = llvmValue.Name;
     }
+}
+
+/**
+    Creates a constant integeral type based of the specified type
+*/
+CuValue constIntegral(CuType type, ulong val) {
+    CuValue value = new CuValue();
+    value.type = type;
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant boolean value
+*/
+CuValue constBool(bool val) {
+    CuValue value = new CuValue();
+    value.type = createBool();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant ubyte value
+*/
+CuValue constUByte(ubyte val) {
+    CuValue value = new CuValue();
+    value.type = createUByte();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant ushort value
+*/
+CuValue constUShort(ushort val) {
+    CuValue value = new CuValue();
+    value.type = createUShort();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant uint value
+*/
+CuValue constUInt(uint val) {
+    CuValue value = new CuValue();
+    value.type = createUInt();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant ulong value
+*/
+CuValue constULong(ulong val) {
+    CuValue value = new CuValue();
+    value.type = createULong();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, false);
+    return value;
+}
+
+/**
+    Creates a constant byte value
+*/
+CuValue constByte(byte val) {
+    CuValue value = new CuValue();
+    value.type = createByte();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, true);
+    return value;
+}
+
+/**
+    Creates a constant short value
+*/
+CuValue constShort(short val) {
+    CuValue value = new CuValue();
+    value.type = createShort();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, true);
+    return value;
+}
+
+/**
+    Creates a constant int value
+*/
+CuValue constInt(int val) {
+    CuValue value = new CuValue();
+    value.type = createInt();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, true);
+    return value;
+}
+
+/**
+    Creates a constant long value
+*/
+CuValue constLong(long val) {
+    CuValue value = new CuValue();
+    value.type = createLong();
+    value.llvmValue = new ConstInt(value.type.llvmType, val, true);
+    return value;
+}
+
+/**
+    Creates a constant floating point value
+*/
+CuValue constFloating(CuType type, double val) {
+    CuValue value = new CuValue();
+    value.type = type;
+    value.llvmValue = new ConstReal(value.type.llvmType, val);
+    return value;
+}
+
+/**
+    Creates a const string literal (as global array)
+*/
+CuValue constStringLiteral(string val) {
+    CuValue value = new CuValue();
+    value.type = createStaticArray(createChar(), val.sizeof);
+    value.llvmValue = new ConstString(val, true);
+    return value;
+}
+
+/**
+    Creates a constant string pointing to a literal
+*/
+CuValue constString(CuValue literal, size_t length) {
+    CuValue value = new CuValue();
+    value.type = createString();
+    value.llvmValue = new ConstStruct([
+        new ConstInt(createSizeT().llvmType, length, false),
+        literal.llvmValue
+    ], false);
+    return value;
+}
+
+/**
+    Creates a constant long value
+*/
+CuValue constFloat(float val) {
+    CuValue value = new CuValue();
+    value.type = createFloat();
+    value.llvmValue = new ConstReal(value.type.llvmType, val);
+    return value;
+}
+
+
+/**
+    Creates a constant long value
+*/
+CuValue constDouble(double val) {
+    CuValue value = new CuValue();
+    value.type = createDouble();
+    value.llvmValue = new ConstReal(value.type.llvmType, val);
+    return value;
+}
+
+CuValue constStruct(CuValue[] values, bool packed = false) {
+    CuValue value = new CuValue();
+
+    Value[] llvmValues = new Value[values.length];
+    CuType[] types = new CuType[values.length];
+    foreach(i, val; values) {
+        types[i] = val.type;
+        llvmValues[i] = val.llvmValue;
+    }
+    value.type = createStruct(types, packed);
+
+    value.llvmValue = new ConstStruct(llvmValues, packed);
+    return value;
 }

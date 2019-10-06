@@ -885,6 +885,7 @@ private:
                 Node* n = new Node(expr.token);
                 n.add(value);
                 n.id = astAssignment;
+                n.token.id = tk.id;
                 return n;
             }
 
