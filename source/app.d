@@ -12,8 +12,5 @@ void main(string[] args)
 	initJIT();
 	JITEngine engine = new JITEngine();
 	engine.compileScriptFile(args[1]);
-	writeln("");
-	engine.printAllIR();
-	writeln("\n===CALL===");
-	writeln(engine.call!(string)("main(string)", "Hello, world!"));
+	writeln(engine.call!string("main(void)"));
 }
