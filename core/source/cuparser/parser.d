@@ -1030,6 +1030,7 @@ private:
 
     Node* paramdef() {
         Token tk;
+
         Node* typ = type();
         if (typ is null) {
             error("Expected valid parameter type!");
@@ -1039,8 +1040,9 @@ private:
         if (!match(tk, [tkIdentifier])) {
             error("Expected parameter name, got " ~ tk.lexeme ~ ", belonging to " ~ typ.token.lexeme ~  "!");
         }
-        typ.add(new Node(tk));
-        return typ;
+        Node* iden = new Node(tk);
+        iden.add(typ);
+        return iden;
     }
 
     Node* paramlist() {
