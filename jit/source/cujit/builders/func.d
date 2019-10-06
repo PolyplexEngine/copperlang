@@ -306,7 +306,7 @@ private:
                 // Cut out the quotes.
                 string stringVal = val.token.lexeme[1..$-1];
                 CuValue global = self.parentModule.addGlobalConstVar(createString(), constStringLiteral(stringVal));
-                return constString(global, stringVal.sizeof);
+                return constString(global, stringVal.length);
             default: throw new Exception("Unsupported literal.");
         }
     }
