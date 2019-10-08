@@ -79,9 +79,9 @@ private:
         if (tkRef is null) {
             Token tk;
             peekNext(&tk);
-            throw new Exception(getOutText(lexer.getSource, tk, errMsg));
+            throw new CompilationException(lexer.getSource, &tk, errMsg);
         }
-        throw new Exception(getOutText(lexer.getSource, *tkRef, errMsg));
+        throw new CompilationException(lexer.getSource, tkRef, errMsg);
     }
 
     // impl
