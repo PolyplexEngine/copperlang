@@ -8,6 +8,7 @@ import cucore.ast;
 import std.conv;
 import std.format;
 import std.stdio;
+import cuparser.compilationException;
 
 public:
 /*
@@ -79,9 +80,9 @@ private:
         if (tkRef is null) {
             Token tk;
             peekNext(&tk);
-            throw new Exception(getOutText(lexer.getSource, tk, errMsg));
+            throw new CompilationException(lexer.getSource, &tk, errMsg);
         }
-        throw new Exception(getOutText(lexer.getSource, *tkRef, errMsg));
+        throw new CompilationException(lexer.getSource, tkRef, errMsg);
     }
 
     // impl
