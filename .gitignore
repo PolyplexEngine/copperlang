@@ -9,6 +9,8 @@ scopl.a
 scopl.lib
 scopl-test-*
 *.exe
+*.dll
+*.lib
 *.o
 *.obj
 *.lst
