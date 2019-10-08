@@ -8,11 +8,3 @@ dependency "copper:cujit" version=">=0.0.0"
 versions "DEBUG" "LLVM_Load"
 subPackage "./core"
 subPackage "./jit"
-
-// Copy LLVM over
-// We don't do LTO, so we don't add that to the list
-// LLVM is Copyright (c) 2003-2018 University of Illinois at Urbana-Champaign. All rights reserved.
-// LLVM is distributed under the University of Illinois Open Source License. See http://opensource.org/licenses/UoI-NCSA.php for details. 
-copyFiles "./libs/win64/LLVM.dll" platform="windows-x86_64"
-copyFiles "./libs/win32/LLVM.dll" platform="windows-x86"
-copyFiles "./libs/LLVM_LICENSE.md"
