@@ -420,6 +420,7 @@ class CuClassType : CuType {
 */
 CuType createTypeFromName(CuState state, string type) {
     switch (type) {
+        case "bool":    return createBool();
         case "ubyte":   return createUByte();
         case "ushort":  return createUShort();
         case "uint":    return createUInt();

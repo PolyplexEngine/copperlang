@@ -302,6 +302,10 @@ private:
                 return constIntegral(expectedType, cast(ulong)(val.token.lexeme.to!long));
             case tkNumberLiteral:
                 return constFloating(expectedType, val.token.lexeme.to!double);
+            case tkTrue:
+                return constBool(true);
+            case tkFalse:
+                return constBool(false);
             case tkStringLiteral, tkMultilineStringLiteral:
                 // Cut out the quotes.
                 string stringVal = val.token.lexeme[1..$-1];
