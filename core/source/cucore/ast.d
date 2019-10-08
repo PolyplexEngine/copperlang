@@ -78,7 +78,7 @@ enum ASTTId astExtension = 100;
 enum ASTTId astInjection = 101;
 
 /// Attribute
-enum ASTTId astAttribute = 200;
+enum ASTTId astAttributeList = 200;
 
 /// constructor
 enum ASTTId astConstructor = 254;
@@ -132,8 +132,8 @@ string getString(ASTTId id) {
             return "<ext>";
         case (astInjection):
             return "<inject>";
-        case (astAttribute):
-            return "<attrib>";
+        case (astAttributeList):
+            return "<attrib list>";
         case (astModule):
             return "<module>";
         case (astConstructor):

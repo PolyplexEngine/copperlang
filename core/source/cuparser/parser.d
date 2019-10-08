@@ -501,31 +501,25 @@ private:
     }  
 
     Node* preDecl(bool isTopLevel = false, bool isStruct = false) {
+        Node* attribNode = new Node(astAttributeList);
         Token tk;
+        Token tk2;
         getToken(&tk);
-        if (match(tk, [tkGlobal, tkLocal])) {
-            Node* xdecl = decl(isTopLevel, isStruct);
 
-            Token tk2;
-            peekNext(&tk2);
-
-            // exdecl, but for access-attribute versions
-            if (match(tk2, [tkExternalDeclaration])) {
-                xdecl.addStart(new Node(tk2, astAttribute));
+        if (match(tk, [tkGlobal, tkLocal, tkExternalDeclaration])) {
+            getToken(&tk2);
+            while(match(tk2, [tkGlobal, tkLocal, tkExternalDeclaration])) {
+                attribNode.add(new Node(tk2));
                 getToken(&tk2);
             }
-            xdecl.addStart(new Node(tk, astAttribute));
-            return xdecl;
+            rewindTo(&tk2);
+        } else {
+            rewindTo(&tk);
         }
 
-        // exdecl, but for non-access attribute versions
-        if (match(tk, [tkExternalDeclaration])) {
-            Node* xdecl = decl(isTopLevel, isStruct);
-            xdecl.addStart(new Node(tk, astAttribute));
-            return xdecl;
-        }
-        rewindTo(&tk);
-        return decl(isTopLevel, isStruct);
+        Node* decl = decl(isTopLevel, isStruct);
+        decl.addStart(attribNode);
+        return decl;
     }
 
     Node* decl(bool isTopLevel = false, bool isStruct = false) {

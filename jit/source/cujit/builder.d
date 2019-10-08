@@ -100,7 +100,7 @@ private:
         CuDecl[] params;
         CuType returnType;
         
-        Node* paramDefList = root.firstChild;
+        Node* paramDefListOrAttrib = root.firstChild;
         params.length = paramDefList.childrenCount();
         if (paramDefList.firstChild !is null) {
 
@@ -157,6 +157,7 @@ public:
     CuModule build(string code) {
         import std.stdio : writeln;
         Node* ast = Parser(code).parse();
+        writeln(ast.toString());
         return buildRoot(ast);
     }
 }
