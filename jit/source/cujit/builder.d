@@ -30,7 +30,9 @@ private:
 
         foreach(CuDecl decl; module_.weakDeclarations) {
             if (decl.type.typeKind == CuTypeKind.function_) {
-                CuFuncBuildContext(cast(CuFunction)decl).build();
+                CuFunction func = cast(CuFunction)decl;
+                if (func.isExternal) func.finalize(false);
+                else CuFuncBuildContext(func).build();
             }
         }
 
@@ -99,8 +101,26 @@ private:
         immutable(string) name = root.token.lexeme;
         CuDecl[] params;
         CuType returnType;
+        bool isExdecl = false;
+        bool visSet = false;
+        Visibility visibility;
         
-        Node* paramDefListOrAttrib = root.firstChild;
+        Node* attribList = root.firstChild;
+        Node* attrib = attribList.firstChild;
+        while (attrib !is null) {
+            if (attrib.token.id == tkExternalDeclaration) {
+                isExdecl = true;
+            }
+
+            if (!visSet && (attrib.token.id == tkGlobal || attrib.token.id == tkLocal)) {
+                visibility = attrib.token.id == tkGlobal ? Visibility.Global : Visibility.Local;
+            }
+            attrib = attrib.right;
+        }
+
+        
+        
+        Node* paramDefList = attribList.right;
         params.length = paramDefList.childrenCount();
         if (paramDefList.firstChild !is null) {
 
@@ -113,14 +133,16 @@ private:
                 param = param.right;
             } while (param !is null);
         }
-        Node* bodyOrReturnType = paramDefList.right;
-        if (bodyOrReturnType.id != astBody) {
-            returnType = nodeToType(bodyOrReturnType);
-            bodyOrReturnType = bodyOrReturnType.right;
+
+        Node* retType = paramDefList.right;
+        if (retType.id != astBody) {
+            returnType = nodeToType(retType);
         }
+
+        Node* body = retType.right;
         
-        CuFunction func = new CuFunction(mod, returnType, name, params);
-        func.setBodyAST(bodyOrReturnType);
+        CuFunction func = new CuFunction(mod, returnType, name, params, visibility, isExdecl);
+        func.setBodyAST(body);
         mod.addWeakDeclaration(func);
     }
 

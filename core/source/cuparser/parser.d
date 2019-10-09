@@ -334,6 +334,9 @@ private:
         if (typ !is null) {
             typ.id = astReturnType;
             n.add(typ);
+        } else {
+            Token voidtk = Token(["void"].ptr, tkVoid, 0, 4, 0, 0);
+            n.add(new Node(voidtk, astReturnType));
         }
 
         peekNext(&tk);
@@ -505,17 +508,11 @@ private:
         Token tk;
         Token tk2;
         getToken(&tk);
-
-        if (match(tk, [tkGlobal, tkLocal, tkExternalDeclaration])) {
-            getToken(&tk2);
-            while(match(tk2, [tkGlobal, tkLocal, tkExternalDeclaration])) {
-                attribNode.add(new Node(tk2));
-                getToken(&tk2);
-            }
-            rewindTo(&tk2);
-        } else {
-            rewindTo(&tk);
+        while(match(tk, [tkGlobal, tkLocal, tkExternalDeclaration])) {
+            attribNode.add(new Node(tk));
+            getToken(&tk);
         }
+        rewindTo(&tk);
 
         Node* decl = decl(isTopLevel, isStruct);
         decl.addStart(attribNode);
