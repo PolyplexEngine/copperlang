@@ -187,6 +187,8 @@ private:
         rhs = buildImplicitCast(opnode, lhs, rhs);
         
         switch(opnode.token.id) {
+            
+            // ==
             case tkEqual:
                 if (lhs.type.isIntegral) {
                     return new CuValue(createBool(), builder.BuildICmp(IntPredicate.Equal, lhs.llvmValue, rhs.llvmValue));
@@ -194,6 +196,8 @@ private:
                     return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedEqual, lhs.llvmValue, rhs.llvmValue));
                 }
                 throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // !=
             case tkNotEqual:
                 if (lhs.type.isIntegral) {
                     return new CuValue(createBool(), builder.BuildICmp(IntPredicate.NotEqual, lhs.llvmValue, rhs.llvmValue));
@@ -201,6 +205,44 @@ private:
                     return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedNotEqual, lhs.llvmValue, rhs.llvmValue));
                 }
                 throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // <
+            case tkLessThan:
+                if (lhs.type.isIntegral) {
+                    return new CuValue(createBool(), builder.BuildICmp(lhs.type.isSigned ? IntPredicate.SignedLesser : IntPredicate.UnsignedLesser, lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedLesser, lhs.llvmValue, rhs.llvmValue));
+                }
+                throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // <=
+            case tkLessThanOrEq:
+                if (lhs.type.isIntegral) {
+                    return new CuValue(createBool(), builder.BuildICmp(lhs.type.isSigned ? IntPredicate.SignedLesserEqual : IntPredicate.UnsignedLesserEqual, lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedLesserEqual, lhs.llvmValue, rhs.llvmValue));
+                }
+                throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // >
+            case tkGreaterThan:
+                if (lhs.type.isIntegral) {
+                    return new CuValue(createBool(), builder.BuildICmp(lhs.type.isSigned ? IntPredicate.SignedGreater : IntPredicate.UnsignedGreater, lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedGreater, lhs.llvmValue, rhs.llvmValue));
+                }
+                throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // >=
+            case tkGreaterThanOrEq:
+                if (lhs.type.isIntegral) {
+                    return new CuValue(createBool(), builder.BuildICmp(lhs.type.isSigned ? IntPredicate.SignedGreaterEqual : IntPredicate.UnsignedGreaterEqual, lhs.llvmValue, rhs.llvmValue));
+                } else if (lhs.type.isFloating) {
+                    return new CuValue(createBool(), builder.BuildFCmp(RealPredicate.UnorderedGreaterEqual, lhs.llvmValue, rhs.llvmValue));
+                }
+                throw new CompilationException(opnode, "Operation '%s' is not implemented for %s".format(opnode.token.lexeme, lhs.type.typeName));
+            
+            // UNKNOWN
             default:
                 throw new CompilationException(opnode, "Operation '%s' is not implemented yet.".format(opnode.token.lexeme));
         }
