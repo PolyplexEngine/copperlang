@@ -1,19 +1,38 @@
-/**
-    Multiline comment
-*/
 module test;
 
-func main() string {
-    bool testBool;
+/**
+    D print function
+*/
+exdecl func print(string value);
 
-    testBool = yes;
-    testBool = no;
-    testBool = true;
-    testBool = false;
+/**
+    int-to-string conversion
+*/
+exdecl func int_to_string(int value) string;
 
-    // Some unicode text
-    string danishText = "Rød grød med fløde, and some emoji 😀 😁 😂";
+/**
+    string-to-int conversion
+*/
+exdecl func string_to_int(string value) int;
 
-    // return the text
-    return danishText;
+/**
+    Main function
+*/
+func main(string a, string b) {
+    int ai = string_to_int(a);
+    int bi = string_to_int(b);
+
+    if (ai == 1) {
+        print("A is 1");
+    } else if (ai == 2) {
+        print("A is 2");
+    } else if (ai == 3) {
+        print("A is 3");
+    } else if (ai == 4) {
+        print("A is 4");
+    } else if (ai == 5) {
+        print("A is 5");
+    } else {
+        print("A is some other value.");
+    }
 }

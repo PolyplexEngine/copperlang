@@ -38,8 +38,8 @@ class CompilationException : Exception
     /**
         Constructs new exception
     */
-    this(string source, Node* n, string msg, string file = __FILE__, size_t line = __LINE__)
+    this(Node* n, string msg, string file = __FILE__, size_t line = __LINE__)
     {
-        this(source, &n.token, msg, file, line);
+        this(n.token.source, &n.token, msg, file, line);
     }
 }

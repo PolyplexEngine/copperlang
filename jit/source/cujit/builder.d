@@ -27,12 +27,10 @@ private:
         scanImports(root.firstChild, module_);
         scanTypes(root.firstChild, module_);
 
-
         foreach(CuDecl decl; module_.weakDeclarations) {
             if (decl.type.typeKind == CuTypeKind.function_) {
                 CuFunction func = cast(CuFunction)decl;
-                if (func.isExternal) func.finalize(false);
-                else CuFuncBuildContext(func).build();
+                (new CuFuncBuildContext(func)).build();
             }
         }
 
@@ -129,6 +127,7 @@ private:
             size_t i = 0;
             do {
                 CuDecl decl = nodeToParamDecl(param, mod);
+                decl.allocSpace = param;
                 params[i++] = decl;
                 param = param.right;
             } while (param !is null);
@@ -143,7 +142,8 @@ private:
         
         CuFunction func = new CuFunction(mod, returnType, name, params, visibility, isExdecl);
         func.setBodyAST(body);
-        mod.addWeakDeclaration(func);
+        if (!isExdecl) mod.addWeakDeclaration(func);
+        func.finalize(isExdecl);
     }
 
     CuDecl nodeToParamDecl(Node* node, CuModule mod) {
@@ -179,7 +179,7 @@ public:
     CuModule build(string code) {
         import std.stdio : writeln;
         Node* ast = Parser(code).parse();
-        writeln(ast.toString());
+        //debug writeln(ast.toString());
         return buildRoot(ast);
     }
 }

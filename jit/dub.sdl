@@ -2,7 +2,7 @@ name "cujit"
 description "The CopperLang JIT"
 authors "clipsey"
 copyright "Copyright © 2019, clipsey"
-license "Boost"
+license "BSL-1.0"
 
 dependency "copper:cucore" version="*"
 dependency "dllvm" version="~master"

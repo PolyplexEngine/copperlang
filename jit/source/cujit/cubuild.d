@@ -433,8 +433,16 @@ CuType createTypeFromName(CuState state, string type) {
         case "float":   return createFloat();
         case "double":  return createDouble();
         case "string":  return createString();
+        case "void":    return createVoid();
         default: return state.findType(type);
     }
+}
+
+/**
+    void
+*/
+CuType createVoid() {
+    return new CuType(CuTypeKind.void_, Context.Global.CreateVoid());
 }
 
 /**
@@ -590,7 +598,6 @@ public:
     */
     CuModule addModule(string name, Node* ast) {
         CuModule mod = new CuModule(this, name, ast);
-        modules ~= mod;
         return mod;
     }
 
@@ -600,6 +607,9 @@ public:
     CuType findType(string type) {
         import std.conv : to;
         import std.stdio;
+
+        if (type == "") return null;
+
         // Handle arrays
         if (type.isDynamicArray) {
             return new CuPointerType(findType(type[0..$-2]));
@@ -651,7 +661,7 @@ public:
     /**
         Tries to find a function as closely matching as possible
     */
-    CuFunction findFunction(string name, CuType[] argTypes) {
+    CuFunction findFunction(string name, CuType[] argTypes, bool ignoreTypes = false) {
          // Iterate through all modules
         foreach(mod; modules) {
             foreach (CuDecl decl; mod.declarations) {
@@ -724,6 +734,7 @@ public:
         this.ast = ast;
         this.name_ = name;
         this.parentState = state;
+        this.parentState.modules ~= this;
     }
 
     /**
@@ -781,6 +792,11 @@ private:
 public:
 
     /**
+        Wether this declaration is external
+    */
+    bool isExternal;
+
+    /**
         The parent module of the declaration
     */
     CuModule parentModule;
@@ -811,14 +827,20 @@ public:
     size_t offset;
 
     /**
+        The node where it is allocated
+    */
+    Node* allocSpace;
+
+    /**
         Creates a new copper declaration
     */
-    this(CuModule module_, CuType type, string name, CuDecl parent = null, Visibility visibility = Visibility.Local) { 
+    this(CuModule module_, CuType type, string name, CuDecl parent = null, Visibility visibility = Visibility.Global, bool isExdecl = false) { 
         this.parentModule = module_;
         this.type = type;
         this.name = name;
         this.parent = parent;
         this.visibility = visibility;
+        this.isExternal = isExdecl;
     }
 }
 
@@ -857,6 +879,11 @@ public:
         The parent section (the section that this was created from)
     */
     CuSection parent;
+
+    /**
+        Allocated variables on the stack
+    */
+    CuValue[string] allocatedStackVars;
 }
 
 /**
@@ -864,21 +891,23 @@ public:
 */
 class CuFunction : CuDecl {
 private:
-    Function llvmFunc;
     CuDecl[string] idxMapping;
     CuSection[string] sectionMapping;
+    CuDecl[] idxList;
 
 package(cujit):
+    Function llvmFunc;
     Node* bodyAST;
 
 public:
-    this(CuModule module_, CuType returnType, string name, CuDecl[] parameters) {
+    this(CuModule module_, CuType returnType, string name, CuDecl[] parameters, Visibility visibility = Visibility.Global, bool isExdecl = false) {
 
         this.parentModule = module_;
         this.name = name;
 
         // Generate the struct type info
         CuType[] paramTypes = new CuType[parameters.length];
+        idxList = new CuDecl[parameters.length];
         foreach(i, param; parameters) {
 
             // Fetch the CuType from the declaration and set its mapping, might as well do both.
@@ -887,6 +916,7 @@ public:
                 throw new Exception("There already exists a parameter called "~param.name~" in "~mangledName~"!");
             }
             idxMapping[param.name] = param;
+            idxList[i] = param;
             param.offset = i;
 
             // Update the member declaration's parent while we're at it.
@@ -896,6 +926,8 @@ public:
         // Set the type and make it point back to the declaration
         this.type = createFunc(returnType, paramTypes);
         this.funcType.declaration = this;
+        this.isExternal = isExdecl;
+        this.visibility = visibility;
     }
 
     /**
@@ -937,19 +969,11 @@ public:
 
         Its body can be; though.
     */
-    CuSection finalize() {
+    void finalize(bool cCompat = false) {
         if (llvmFunc !is null) throw new Exception(this.mangledName~" is already finalized!");
-        llvmFunc = new Function(this.parentModule.llvmMod, cast(FuncType)this.funcType.llvmType, mangledName());
+        llvmFunc = new Function(this.parentModule.llvmMod, cast(FuncType)this.funcType.llvmType, cCompat ? name : mangledName);
 
-        // The AST should be removed at this point to save memory
-        // As it should have been copied in to the compiler context
-        // Before finalization.
-        destroy(bodyAST);
-
-        // The function is finalized, add it to the module's declarations list
-        this.parentModule.addDeclaration(mangledName, this);
-
-        return getSection("entry");
+        parentModule.addDeclaration(cCompat ? name : mangledName, this);
     }
 
     /**
@@ -962,6 +986,28 @@ public:
             sectionMapping[name] = new CuSection(this, llvmFunc.AppendBasicBlock(Context.Global, name), name, from);
         }
         return sectionMapping[name];
+    }
+
+    /**
+        Appends a new section
+    */
+    CuSection appendSection(string name, CuSection from = null) {
+        BasicBlock block = llvmFunc.AppendBasicBlock(Context.Global, name);
+        CuSection section = new CuSection(this, block, block.Name, from);
+        sectionMapping[block.Name] = section;
+        return sectionMapping[block.Name];
+    }
+
+    /**
+        Appends a section and copies the references from the origin section in
+    */
+    CuSection appendCopySection(string name, CuSection copyFrom) {
+        CuSection appended = appendSection(name);
+
+        // Copy stack vars over
+        appended.allocatedStackVars = copyFrom.allocatedStackVars;
+
+        return appended;
     }
 
     /**
@@ -980,6 +1026,14 @@ public:
     @property
     CuDecl[string] parameters() {
         return idxMapping;
+    }
+
+    /**
+        Gets the index mapped parameters in numeric order
+    */
+    @property
+    CuDecl[] orderedParams() {
+        return idxList;
     }
 
     /**

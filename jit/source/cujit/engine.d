@@ -10,7 +10,7 @@ import std.stdio;
 class JITEngine {
 package(cujit):
     ExecutionEngine engine;
-    IModuleProvider provider;
+    IModuleProvider modprovider;
     CuBuilder builder;
 
     CuModule[] modules;
@@ -23,13 +23,18 @@ public:
         engine = new ExecutionEngine();
         builder = new CuBuilder(this);
 
-        provider = new FileModuleProvider();
-        provider.setRoot(basepath);
+        modprovider = new FileModuleProvider();
+        modprovider.setRoot(basepath);
 
     }
 
-    IModuleProvider getProvider() {
-        return provider;
+    @property
+    IModuleProvider provider() {
+        return modprovider;
+    }
+
+    void provider(IModuleProvider provider) {
+        this.modprovider = provider;
     }
 
     void compileScriptFile(string moduleFile) {
@@ -47,6 +52,25 @@ public:
         foreach(module_; modules) {
             writeln(module_.getIR);
         }
+    }
+
+    string[] listAllFunctions() {
+        import std.format : format;
+        string[] funcList;
+
+        foreach(mod; modules) {
+            foreach(value; mod.declarations) {
+                if (value.type.typeKind != CuTypeKind.function_) continue;
+
+                CuFunction func = cast(CuFunction)value;
+                if (func.isExternal) {
+                    funcList ~= "%s (external C)".format(func.name);
+                } else {
+                    funcList ~= "%s (copper native)".format(func.mangledName);
+                }
+            }
+        }
+        return funcList;
     }
 
     /**
