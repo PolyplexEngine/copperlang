@@ -17,6 +17,6 @@ void main(string[] args)
         writeln(ex.msg);
 		return;
     }
-    debug engine.printAllIR();
+    //debug engine.printAllIR();
     engine.call!void(args[2], args[3], args[4]);
 }

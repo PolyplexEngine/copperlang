@@ -19,6 +19,8 @@ exdecl func string_to_int(string value) int;
     Main function
 */
 func main(string a, string b) {
+    print(a);
+    print(b);
     int ai = string_to_int(a);
     int bi = string_to_int(b);
 

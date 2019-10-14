@@ -38,7 +38,6 @@ private:
                         break;
 
                     case astBranch:
-                        writeln(bodyleaf.toString());
                         buildBranch(bodyleaf);
                         break;
 

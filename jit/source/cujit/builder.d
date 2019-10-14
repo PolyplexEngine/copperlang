@@ -124,12 +124,18 @@ private:
 
             // Iterate through every parameter and build their type.
             Node* param = paramDefList.firstChild;
+
+            // Fast-forward to the end of the array 
+            // NOTICE: Parameters are in reversed order in D, hence the reversed order of this.
+            while (param.right !is null) param = param.right;
+
+            // Go backwards through parameters and add them
             size_t i = 0;
             do {
                 CuDecl decl = nodeToParamDecl(param, mod);
                 decl.allocSpace = param;
                 params[i++] = decl;
-                param = param.right;
+                param = param.left;
             } while (param !is null);
         }
 
