@@ -25,3 +25,13 @@ copperlang
 copper
 ./LLVM_LICENSE.md
 LLVM_LICENSE.md
+
+# Ensure that LLVM libraries don't get uploaded by accident
+# Especially for Windows and macOS builds
+libLLVM.*
+libLTO.*
+LLVM.dll
+LTO.dll
+
+# Also this macOS file is irellevant
+.DS_Store
