@@ -253,6 +253,35 @@ public:
 }
 
 /**
+    A copper dynamic array type
+*/
+class CuDynArrayType : CuType {
+public:
+    /**
+        The type of the elements in the array
+    */
+    CuType elementType;
+
+    /**
+        The length of the array
+    */
+    CuType length;
+
+    this() { }
+
+    /**
+        Creates a new pointer
+    */
+    this(CuType elementType, CuTypeKind kind = CuTypeKind.dynamic_array) {
+        this.typeKind = kind;
+        this.typeName = elementType.typeName~"[]";
+        this.elementType = elementType;
+        this.length = createSizeT();
+        this.llvmType = Context.Global.CreateStruct([length.llvmType, Context.Global.CreatePointer(elementType.llvmType)], false);
+    }
+}
+
+/**
     A copper array type
 */
 class CuArrayType : CuType {
@@ -280,43 +309,16 @@ public:
 }
 
 /**
-    A dynamic array
-*/
-class CuDynamicArrayType : CuType {
-private:
-    this() { }
-
-public:
-    /**
-        The array pointer to element 0 type
-    */
-    CuPointerType pointer;
-    
-    /**
-        The array length type (size_t)
-    */
-    CuType length;
-
-    this(CuType elementType) {
-        this.typeKind = CuTypeKind.dynamic_array;
-        this.typeName = cast(string)CuTypeKind.dynamic_array;
-        this.pointer = createPointer(elementType);
-        this.length = createSizeT();
-        this.llvmType = Context.Global.CreateStruct([length.llvmType, pointer.llvmType], false);
-    }
-}
-
-/**
     A string
 */
-class CuStringType : CuDynamicArrayType {
+class CuStringType : CuDynArrayType {
 public:
     this() {
         this.typeKind = CuTypeKind.string_;
         this.typeName = cast(string)CuTypeKind.string_;
-        this.pointer = createPointer(createChar());
+        this.elementType = createPointer(createChar());
         this.length = createSizeT();
-        this.llvmType = Context.Global.CreateStruct([length.llvmType, pointer.llvmType], false);
+        this.llvmType = Context.Global.CreateStruct([length.llvmType, elementType.llvmType], false);
     }
 }
 
@@ -547,8 +549,8 @@ CuArrayType createStaticArray(CuType elements, size_t length) {
 /**
     Creates a new dynamic array type
 */
-CuDynamicArrayType createDynamicArray(CuType elements) {
-    return new CuDynamicArrayType(elements);
+CuDynArrayType createDynamicArray(CuType elements) {
+    return new CuDynArrayType(elements);
 }
 
 /**
@@ -612,7 +614,7 @@ public:
 
         // Handle arrays
         if (type.isDynamicArray) {
-            return new CuPointerType(findType(type[0..$-2]));
+            return new CuDynArrayType(findType(type[0..$-2]));
         } else if (type.isStaticArray) {
             string arrayLenStr = type.fetchArrayLength();
 
@@ -956,6 +958,8 @@ public:
         // Get the parameter type names
         string[] tNames = new string[funcType.argumentTypes.length];
         foreach(i, param; funcType.argumentTypes) {
+            import std.stdio : writeln;
+            writeln("Adding type "~param.typeName);
             tNames[i] = param.typeName;
         }
 

@@ -1096,16 +1096,16 @@ private:
         return params;
     }
 
-    Node* parameters() {
-        consume(tkOpenParan, "Expected '(' to open parameters");
+    Node* parameters(TokenId open = tkOpenParan, TokenId close = tkCloseParan) {
+        consume(open, "Expected '(' to open parameters");
         Token tk;
         Node* params = new Node(astParameters);
 
         peekNext(&tk);
 
         // No parameters
-        if (match(tk, [tkCloseParan])) {
-            consume(tkCloseParan, "Expected ')' to close parameters");
+        if (match(tk, [close])) {
+            consume(close, "Expected ')' to close parameters");
             return params;
         }
 
@@ -1121,7 +1121,7 @@ private:
 
         // Done with parameters, go back.
         rewindTo(&tk);
-        consume(tkCloseParan, "Expected ')' to close parameters, got '" ~ tk.lexeme ~ "'");
+        consume(close, "Expected ')' to close parameters, got '" ~ tk.lexeme ~ "'");
         return params;
     }
 
@@ -1156,6 +1156,23 @@ private:
 
             // This is a function call.
             iden.id = astFunctionCall;
+            return iden;
+        } else if (match(tk2, [tkOpenBracket])) {
+            rewindTo(&tk2);
+            iden.add(parameters(tkOpenBracket, tkCloseBracket));
+
+            // Allow call().thing to be possible
+            getToken(&tk2);
+            if (match(tk2, [tkDot])) {
+            
+                // Parse identifier lower down in content
+                iden.add(identifier());
+                return iden;
+            }
+            rewindTo(&tk2);
+
+            // This is a function call.
+            iden.id = astExpression;
             return iden;
         } else if (match(tk2, [tkInc, tkDec])) {
             if (isThis) error("Cannot increment or decrement 'this' reference.");

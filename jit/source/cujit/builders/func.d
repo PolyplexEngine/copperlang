@@ -402,6 +402,15 @@ private:
     CuValue buildFetch(Node* val, CuType expectedType) {
         if (val.token.id == tkIdentifier) {
             CuValue addr = fetchVariableFromScopes(val, val.token.lexeme);
+
+            if (val.firstChild !is null && val.firstChild.id == astParameters) {
+                // TODO: allow multidmensional arrays and AAs
+
+                CuValue index = buildExpression(val.firstChild.firstChild, expectedType);
+
+                return buildArrayFetch(addr, index);
+            }
+
             return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
         }
         return buildLiteral(val, expectedType);
@@ -409,6 +418,24 @@ private:
 
     CuValue buildFetch(CuValue addr, CuType expectedType) {
         return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
+    }
+
+    CuValue buildArrayFetch(CuValue array, CuValue index) {
+        CuDynArrayType type = cast(CuDynArrayType)array.type;
+        writeln(type.typeName, " ", type.llvmType.TypeName);
+
+        CuValue arrayRoot = new CuValue(type.elementType, builder.BuildStructGEP(array.llvmValue, 1));
+
+        return new CuValue(
+            type.elementType,
+            builder.BuildLoad(
+                builder.BuildInboundsGEP(
+                    builder.BuildLoad(arrayRoot.llvmValue, arrayRoot.name),
+                    [index.llvmValue]
+                ), 
+                array.name
+            )
+        );
     }
 
     void buildBranch(Node* branchExpr) {

@@ -11,6 +11,7 @@ void main(string[] args)
     try
     {
         engine.compileScriptFile(args[1]);
+        engine.printAllIR();
     }
     catch (CompilationException ex)
     {
@@ -18,5 +19,5 @@ void main(string[] args)
 		return;
     }
     //debug engine.printAllIR();
-    engine.call!void(args[2], args[3], args[4]);
+    engine.call!void("main(string[])", args);
 }
