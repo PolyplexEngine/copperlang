@@ -178,6 +178,10 @@ public:
         this.engine = engine;
         this.state = new CuState();
     }
+    
+    ~this() {
+        destroy(builder);
+    }
 
     /**
         Builds a copper module

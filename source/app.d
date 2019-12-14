@@ -4,10 +4,11 @@ import cucore;
 import std.file;
 import std.conv;
 
-void main(string[] args)
+int main(string[] args)
 {
     initJIT();
     JITEngine engine = new JITEngine();
+    scope(exit) destroy(engine);
     try
     {
         engine.compileScriptFile(args[1]);
@@ -16,8 +17,8 @@ void main(string[] args)
     catch (CompilationException ex)
     {
         writeln(ex.msg);
-		return;
+		return -1;
     }
     //debug engine.printAllIR();
-    engine.call!void("main(string[])", args);
+    return engine.call!int("main(string[])", args);
 }

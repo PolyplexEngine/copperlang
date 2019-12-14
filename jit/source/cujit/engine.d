@@ -28,6 +28,11 @@ public:
 
     }
 
+    ~this() {
+        destroy(builder);
+        destroy(engine);
+    }
+
     @property
     IModuleProvider provider() {
         return modprovider;
