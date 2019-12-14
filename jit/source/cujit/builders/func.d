@@ -403,14 +403,28 @@ private:
         if (val.token.id == tkIdentifier) {
             CuValue addr = fetchVariableFromScopes(val, val.token.lexeme);
 
-            if (val.firstChild !is null && val.firstChild.id == astParameters) {
-                // TODO: allow multidmensional arrays and AAs
 
-                CuValue index = buildExpression(val.firstChild.firstChild, expectedType);
+            switch (addr.type.typeKind) {
+                case CuTypeKind.dynamic_array, CuTypeKind.string_:
+                    switch (val.firstChild.id) {
+                        case astIdentifier:
+                            if (val.firstChild.name == "length") break;
+                            throw new Exception("Invalid identifier for "~val.name);
 
-                return buildArrayFetch(addr, index);
+                        case astParameters:
+
+                            // TODO: allow multidmensional arrays and AAs
+                            CuValue index = buildExpression(val.firstChild.firstChild, expectedType);
+                            return buildArrayFetch(addr, index);
+
+                        default:
+                            throw new Exception("Malformed AST");
+                    }
+                    break;
+                
+                default: 
+                    break;
             }
-
             return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
         }
         return buildLiteral(val, expectedType);
