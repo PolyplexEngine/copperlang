@@ -1,18 +1,24 @@
 import std.stdio;
-import culexer;
-import cuparser;
-import cucore.node;
 import cujit;
-import dllvm;
+import cucore;
 import std.file;
+import std.conv;
 
-void main(string[] args)
+int main(string[] args)
 {
-	initJIT();
-	JITEngine engine = new JITEngine();
-	engine.compileScriptFile("tests/test.cu");
-
-	alias factorialPtr = int function(float, float);
-	factorialPtr speedCalc = engine.getFunction!factorialPtr("speedCalc(float, float)");
-	writeln(speedCalc(10f, 0.6f));
+    initJIT();
+    JITEngine engine = new JITEngine();
+    scope(exit) destroy(engine);
+    try
+    {
+        engine.compileScriptFile(args[1]);
+        engine.printAllIR();
+    }
+    catch (CompilationException ex)
+    {
+        writeln(ex.msg);
+		return -1;
+    }
+    //debug engine.printAllIR();
+    return engine.call!int("main(string[])", args);
 }

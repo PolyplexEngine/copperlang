@@ -4,7 +4,6 @@ import culexer;
 import cucore.strutils;
 import cucore.token;
 import cucore.node;
-import cuparser.types;
 import cucore.ast;
 import std.conv;
 import std.format;
@@ -21,8 +20,6 @@ private:
     Token curToken;
     Lexer lexer;
     bool doSkipComments;
-
-    TypeMapping mapping;
 
     void getToken(Token* token, string func = __PRETTY_FUNCTION__) {
         prevToken = curToken;
@@ -82,9 +79,9 @@ private:
         if (tkRef is null) {
             Token tk;
             peekNext(&tk);
-            throw new Exception(getOutText(lexer.getSource, tk, errMsg));
+            throw new CompilationException(lexer.getSource, &tk, errMsg);
         }
-        throw new Exception(getOutText(lexer.getSource, *tkRef, errMsg));
+        throw new CompilationException(lexer.getSource, tkRef, errMsg);
     }
 
     // impl
@@ -106,28 +103,6 @@ private:
         getToken(&tk);
         writeln(tk.toString);
         return new Node(tk);
-    }
-
-    void addType(Token basedOn, TypeId id) {
-        import std.algorithm.searching : canFind;
-        if (mapping.hasType(basedOn)) {
-            error("Type with name "~basedOn.lexeme~" already exists in "~mapping.mod~"!", &basedOn);
-        }
-        mapping.add(RoughType(id, basedOn.lexeme));
-        writeln("Added type of ", basedOn.lexeme, "...");
-    }
-
-    void updateType(Token* tk) {
-        if (match(*tk, [tkIdentifier])) {
-            if (mapping.hasType(*tk)) {
-                if (mapping.get(*tk).typeId == tpClass) {
-                    tk.id = tkClass;
-                }
-                if (mapping.get(*tk).typeId == tpStruct) {
-                    tk.id = tkStruct;
-                }
-            }
-        }
     }
 
     void skipComments() {
@@ -182,7 +157,6 @@ private:
                 visitor = visitor.firstChild;
             }
         }
-        mapping.mod = mod;
     }
 
     void scanRoot() {
@@ -219,7 +193,6 @@ private:
 
         getToken(&name);
         getToken(&tk);
-        addType(name, tpClass);
 
         while (!match(tk, [tkStartScope, tkEndStatement]) && !eof) {
             getToken(&tk);
@@ -234,7 +207,6 @@ private:
 
         getToken(&name);
         getToken(&tk);
-        addType(name, tpStruct);
 
         while (!match(tk, [tkStartScope, tkEndStatement]) && !eof) {
             getToken(&tk);
@@ -362,6 +334,9 @@ private:
         if (typ !is null) {
             typ.id = astReturnType;
             n.add(typ);
+        } else {
+            Token voidtk = Token(["void"].ptr, tkVoid, 0, 4, 0, 0);
+            n.add(new Node(voidtk, astReturnType));
         }
 
         peekNext(&tk);
@@ -529,31 +504,19 @@ private:
     }  
 
     Node* preDecl(bool isTopLevel = false, bool isStruct = false) {
+        Node* attribNode = new Node(astAttributeList);
         Token tk;
+        Token tk2;
         getToken(&tk);
-        if (match(tk, [tkGlobal, tkLocal])) {
-            Node* xdecl = decl(isTopLevel, isStruct);
-
-            Token tk2;
-            peekNext(&tk2);
-
-            // exdecl, but for access-attribute versions
-            if (match(tk2, [tkExternalDeclaration])) {
-                xdecl.addStart(new Node(tk2, astAttribute));
-                getToken(&tk2);
-            }
-            xdecl.addStart(new Node(tk, astAttribute));
-            return xdecl;
-        }
-
-        // exdecl, but for non-access attribute versions
-        if (match(tk, [tkExternalDeclaration])) {
-            Node* xdecl = decl(isTopLevel, isStruct);
-            xdecl.addStart(new Node(tk, astAttribute));
-            return xdecl;
+        while(match(tk, [tkGlobal, tkLocal, tkExternalDeclaration])) {
+            attribNode.add(new Node(tk));
+            getToken(&tk);
         }
         rewindTo(&tk);
-        return decl(isTopLevel, isStruct);
+
+        Node* decl = decl(isTopLevel, isStruct);
+        decl.addStart(attribNode);
+        return decl;
     }
 
     Node* decl(bool isTopLevel = false, bool isStruct = false) {
@@ -580,7 +543,6 @@ private:
 
         // Get type of declaration
         peekNext(&type);
-        if (mapping.hasType(type)) updateType(&type);
 
         if (!isType(type)) {
             error("Expected type defintion!");
@@ -617,23 +579,53 @@ private:
                                     Misc
     */
 
-    Node* type() {
+    Node* typeArray() {
         Token tk;
         Token tk2;
+
+        getToken(&tk);
+        if (match(tk, [tkOpenBracket])) {
+            consume(tkCloseBracket, "Expected ']'!");
+            getToken(&tk2);
+
+            // We're starting an array, pre-check
+            if (match(tk2, [tkOpenBracket])) {
+
+                // Rewind back, recall this function and get the array portion
+                rewindTo(&tk2);
+                tk.length++;
+                tk.id = tkArray;
+                Node* n = typeArray();
+                n.add(new Node(tk));
+                return n.firstChild;
+            }
+
+            rewindTo(&tk2);
+            tk.length++;
+            tk.id = tkArray;
+            return new Node(tk);
+        }
+
+        rewindTo(&tk);
+        return null;
+    }
+
+    Node* type() {
+        Token tk;
+
         getToken(&tk);
         if (isType(tk)) {
-            // Array handling
-            getToken(&tk2);
-            if (match(tk2, [tkOpenBracket])) {
-                Token brck = tk2;
-                tk2 = consume(tkCloseBracket, "Invalid array type specification!");
-                brck.length++;
-                brck.id = tkArray;
-                Node* arrNode = new Node(brck);
-                arrNode.add(new Node(tk));
-                return arrNode;
+
+            Node* arr = typeArray();
+            if (arr !is null) {
+                arr.add(new Node(tk));
+
+                // Move back up our array chain to the top level parent of it, this is the outer most array
+                while (arr.parent !is null) {
+                    arr = arr.parent;
+                }
+                return arr;
             }
-            rewindTo(&tk2);
             return new Node(tk);
         }
         rewindTo(&tk);
@@ -656,7 +648,7 @@ private:
             tkString,
             tkChar,
             tkPtr
-        ]) || mapping.hasType(tk) || match(tk, [tkIdentifier]));
+        ]) || match(tk, [tkIdentifier]));
     }
 
     /*
@@ -884,6 +876,7 @@ private:
                 Node* n = new Node(expr.token);
                 n.add(value);
                 n.id = astAssignment;
+                n.token.id = tk.id;
                 return n;
             }
 
@@ -1059,6 +1052,7 @@ private:
 
     Node* paramdef() {
         Token tk;
+
         Node* typ = type();
         if (typ is null) {
             error("Expected valid parameter type!");
@@ -1068,8 +1062,9 @@ private:
         if (!match(tk, [tkIdentifier])) {
             error("Expected parameter name, got " ~ tk.lexeme ~ ", belonging to " ~ typ.token.lexeme ~  "!");
         }
-        typ.add(new Node(tk));
-        return typ;
+        Node* iden = new Node(tk);
+        iden.add(typ);
+        return iden;
     }
 
     Node* paramlist() {
@@ -1101,16 +1096,16 @@ private:
         return params;
     }
 
-    Node* parameters() {
-        consume(tkOpenParan, "Expected '(' to open parameters");
+    Node* parameters(TokenId open = tkOpenParan, TokenId close = tkCloseParan) {
+        consume(open, "Expected '(' to open parameters");
         Token tk;
         Node* params = new Node(astParameters);
 
         peekNext(&tk);
 
         // No parameters
-        if (match(tk, [tkCloseParan])) {
-            consume(tkCloseParan, "Expected ')' to close parameters");
+        if (match(tk, [close])) {
+            consume(close, "Expected ')' to close parameters");
             return params;
         }
 
@@ -1126,7 +1121,7 @@ private:
 
         // Done with parameters, go back.
         rewindTo(&tk);
-        consume(tkCloseParan, "Expected ')' to close parameters, got '" ~ tk.lexeme ~ "'");
+        consume(close, "Expected ')' to close parameters, got '" ~ tk.lexeme ~ "'");
         return params;
     }
 
@@ -1161,6 +1156,23 @@ private:
 
             // This is a function call.
             iden.id = astFunctionCall;
+            return iden;
+        } else if (match(tk2, [tkOpenBracket])) {
+            rewindTo(&tk2);
+            iden.add(parameters(tkOpenBracket, tkCloseBracket));
+
+            // Allow call().thing to be possible
+            getToken(&tk2);
+            if (match(tk2, [tkDot])) {
+            
+                // Parse identifier lower down in content
+                iden.add(identifier());
+                return iden;
+            }
+            rewindTo(&tk2);
+
+            // This is a function call.
+            iden.id = astExpression;
             return iden;
         } else if (match(tk2, [tkInc, tkDec])) {
             if (isThis) error("Cannot increment or decrement 'this' reference.");
@@ -1251,9 +1263,5 @@ public:
         scanTypes();
 
         return module_();
-    }
-
-    TypeMapping getMapping() {
-        return mapping;
     }
 }

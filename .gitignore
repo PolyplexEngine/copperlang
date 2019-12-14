@@ -9,6 +9,8 @@ scopl.a
 scopl.lib
 scopl-test-*
 *.exe
+*.dll
+*.lib
 *.o
 *.obj
 *.lst
@@ -21,3 +23,15 @@ dub.selections.json
 copperlang
 *.a
 copper
+./LLVM_LICENSE.md
+LLVM_LICENSE.md
+
+# Ensure that LLVM libraries don't get uploaded by accident
+# Especially for Windows and macOS builds
+libLLVM.*
+libLTO.*
+LLVM.dll
+LTO.dll
+
+# Also this macOS file is irellevant
+.DS_Store

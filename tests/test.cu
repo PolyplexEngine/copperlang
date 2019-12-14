@@ -1,16 +1,29 @@
-/+
-    Here will be a license comment,
-    This test.cu file is mostly just a general sandbox testing environment and will change often.
-    
-    KEEP THIS COMMENT PRESENT.
-+/
 module test;
-import test2;
 
-func speedCalc(float speed, float drag) float {
-    return (speed * drag) / getGravConst();
-}
+/**
+    D print function
+*/
+exdecl func print(string value);
 
-func getGravConst() float {
-    return 12.0;
+/**
+    int-to-string conversion
+*/
+exdecl func int_to_string(int value) string;
+
+/**
+    string-to-int conversion
+*/
+exdecl func string_to_int(string value) int;
+
+/**
+    Main function
+*/
+func main(string[] args) int {
+    print(int_to_string(args.length));
+    print(args[0]);
+    print(args[1]);
+    print(args[2]);
+    print(args[3]);
+    print(int_to_string(args[3].length));
+    return 0;
 }

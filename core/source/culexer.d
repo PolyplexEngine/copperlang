@@ -29,6 +29,7 @@ shared static this()
     keywords["long"] = tkLong;
     keywords["float"] = tkFloat;
     keywords["double"] = tkDouble;
+    keywords["void"] = tkVoid;
 
  
     keywords["ptr"] = tkPtr;

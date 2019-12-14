@@ -260,6 +260,9 @@ enum TokenId tkStruct = 128;
 /// class
 enum TokenId tkClass = 129;
 
+/// void
+enum TokenId tkVoid = 130;
+
 
 /*
     Keywords
