@@ -959,7 +959,6 @@ public:
         string[] tNames = new string[funcType.argumentTypes.length];
         foreach(i, param; funcType.argumentTypes) {
             import std.stdio : writeln;
-            writeln("Adding type "~param.typeName);
             tNames[i] = param.typeName;
         }
 

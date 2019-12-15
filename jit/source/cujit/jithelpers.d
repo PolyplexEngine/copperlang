@@ -13,6 +13,13 @@ import std.stdio;
     Text exdecl
 */
 extern(C) void print(string text) {
+    write(text);
+}
+
+/**
+    Text exdecl
+*/
+extern(C) void println(string text) {
     writeln(text);
 }
 
@@ -76,3 +83,7 @@ extern(C) int string_to_int(string value) {
 }
 
 // TODO: fill this part out
+
+extern(C) string strcat(string a, string b) {
+    return a ~ b;
+}

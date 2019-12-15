@@ -5,6 +5,7 @@ import std.conv;
 import dllvm;
 import std.stdio;
 import std.format;
+import std.array;
 
 /**
     A function build context
@@ -529,7 +530,9 @@ private:
             case tkStringLiteral, tkMultilineStringLiteral:
                 // Cut out the quotes.
                 string stringVal = val.token.lexeme[1..$-1];
-                CuValue global = self.parentModule.addGlobalConstVar(createString(), constStringLiteral(stringVal));
+
+                // TODO: Handle escape sequences more gracefully
+                CuValue global = self.parentModule.addGlobalConstVar(createString(), constStringLiteral(stringVal.replace("\\n", "\n")));
                 return constString(global, stringVal.length);
             default: throw new Exception("Unsupported literal.");
         }
