@@ -408,7 +408,7 @@ private:
                 case CuTypeKind.dynamic_array, CuTypeKind.string_:
                     switch (val.firstChild.id) {
                         case astIdentifier:
-                            if (val.firstChild.name == "length") break;
+                            if (val.firstChild.name == "length") return buildLengthFetch(addr);
                             throw new Exception("Invalid identifier for "~val.name);
 
                         case astParameters:
@@ -420,7 +420,6 @@ private:
                         default:
                             throw new Exception("Malformed AST");
                     }
-                    break;
                 
                 default: 
                     break;
@@ -434,16 +433,32 @@ private:
         return new CuValue(addr.type, builder.BuildLoad(addr.llvmValue, addr.name));
     }
 
+    CuValue buildLengthFetch(CuValue array) {
+        return new CuValue(
+            createSizeT(),
+            builder.BuildLoad(
+                builder.BuildStructGEP(array.llvmValue, 0),
+                array.name~".length"
+            )
+        );
+    }
+
     CuValue buildArrayFetch(CuValue array, CuValue index) {
         CuDynArrayType type = cast(CuDynArrayType)array.type;
-        writeln(type.typeName, " ", type.llvmType.TypeName);
 
+        // Dynamic arrays are a length followed by a pointer, this fetches the array from that struct
         CuValue arrayRoot = new CuValue(type.elementType, builder.BuildStructGEP(array.llvmValue, 1));
 
         return new CuValue(
             type.elementType,
+
+            // Load the output value
             builder.BuildLoad(
+
+                // Indexes the array with the defined value the expression evaluated to
                 builder.BuildInboundsGEP(
+                    
+                    // Now load the array in so we can index it
                     builder.BuildLoad(arrayRoot.llvmValue, arrayRoot.name),
                     [index.llvmValue]
                 ), 
